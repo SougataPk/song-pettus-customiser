@@ -13,7 +13,12 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 const DEFAULT_CANVAS = { top: 10, left: 10, width: 20, height: 20 };
 const DEFAULT_VIEWS = ["Front", "Back", "Sleeve"];
 const DEFAULT_POSITION_NAMES = ["Left Chest", "Right Chest"];
-const SIDE_OPTION_FIELDS = ["allowMultipleSelections", "optional"];
+const SIDE_OPTION_FIELDS = [
+  "allowMultipleSelections",
+  "optional",
+  "enableCollapsible",
+  "collapsibleHeading",
+];
 
 const createId = (prefix) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -24,6 +29,9 @@ const createSideKey = (name) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+
+const getPositionImageKey = (viewId, positionId) =>
+  `${viewId}::position::${positionId}`;
 
 const getViewId = (name, existingId) => {
   const sideKey = createSideKey(name);
@@ -37,6 +45,7 @@ const getViewId = (name, existingId) => {
 const createPosition = (name = "Print area") => ({
   id: createId("position"),
   name,
+  addOnProduct: null,
   canvas: { ...DEFAULT_CANVAS },
 });
 
@@ -45,18 +54,23 @@ const createView = (name) => ({
   name,
   allowMultipleSelections: false,
   optional: false,
-  addOnProduct: null,
+  enableCollapsible: false,
+  collapsibleHeading: name,
   positions: DEFAULT_POSITION_NAMES.map(createPosition),
 });
 
-const createDefaultViews = () => DEFAULT_VIEWS.map(createView);
-
-const normalizePosition = (position, index = 0) => ({
+const normalizePosition = (
+  position,
+  index = 0,
+  fallbackAddOnProduct = null,
+) => ({
   id: position?.id || createId(`position-${index}`),
   name:
     position?.name ||
     DEFAULT_POSITION_NAMES[index] ||
     `Print area ${index + 1}`,
+  addOnProduct:
+    normalizeAddOnProduct(position?.addOnProduct) || fallbackAddOnProduct,
   canvas: {
     ...DEFAULT_CANVAS,
     ...(position?.canvas || {}),
@@ -79,17 +93,13 @@ const normalizeAddOnProduct = (product) => {
     imageUrl,
     variantId: product.variantId || variant?.id || "",
     variantTitle: product.variantTitle || variant?.displayName || "",
-    price:
-      product.price ||
-      variant?.price ||
-      variant?.price?.amount ||
-      "",
-    
+    price: product.price || variant?.price || variant?.price?.amount || "",
   };
 };
 
 const normalizeView = (view, fallbackName) => {
   const name = view?.name || fallbackName;
+  const legacyAddOnProduct = normalizeAddOnProduct(view?.addOnProduct);
   const legacyCanvas = view?.canvas
     ? [{ name: `${name} print area`, canvas: view.canvas }]
     : null;
@@ -97,37 +107,24 @@ const normalizeView = (view, fallbackName) => {
     Array.isArray(view?.positions) && view.positions.length > 0
       ? view.positions
       : legacyCanvas ||
-      DEFAULT_POSITION_NAMES.map((positionName) => ({ name: positionName }));
+        DEFAULT_POSITION_NAMES.map((positionName) => ({ name: positionName }));
 
   return {
     id: getViewId(name, view?.id),
     name,
     allowMultipleSelections: Boolean(view?.allowMultipleSelections),
     optional: Boolean(view?.optional),
-    addOnProduct: normalizeAddOnProduct(view?.addOnProduct),
-    positions: positions.map(normalizePosition),
+    enableCollapsible: Boolean(view?.enableCollapsible),
+    collapsibleHeading: view?.collapsibleHeading || name,
+    positions: positions.map((position, index) =>
+      normalizePosition(position, index, legacyAddOnProduct),
+    ),
   };
 };
 
 const normalizeViews = (existingViews) => {
   const sourceViews = Array.isArray(existingViews) ? existingViews : [];
-  const defaultViews = DEFAULT_VIEWS.map((viewName) => {
-    const existing = sourceViews.find(
-      (view) => view.name?.toLowerCase() === viewName.toLowerCase(),
-    );
-    return normalizeView(existing, viewName);
-  });
-  const customViews = sourceViews.filter(
-    (view) =>
-      !DEFAULT_VIEWS.some(
-        (viewName) => view.name?.toLowerCase() === viewName.toLowerCase(),
-      ),
-  );
-
-  return [
-    ...defaultViews,
-    ...customViews.map((view) => normalizeView(view, "View")),
-  ];
+  return sourceViews.map((view) => normalizeView(view, "View"));
 };
 
 const viewMissingSideOptionDefaults = (view) =>
@@ -177,8 +174,12 @@ const normalizeColorImages = (color, views, existing) => ({
   color,
   images: views.reduce((images, view) => {
     images[view.id] = getExistingImage(existing?.images, view);
+    view.positions.forEach((position) => {
+      const imageKey = getPositionImageKey(view.id, position.id);
+      images[imageKey] = existing?.images?.[imageKey] || "";
+    });
     return images;
-  }, {}),
+  }, { ...(existing?.images || {}) }),
 });
 
 const normalizeSettings = (colors, parsed) => {
@@ -214,7 +215,7 @@ const normalizeSettings = (colors, parsed) => {
     return { views, colorImages };
   }
 
-  const views = createDefaultViews();
+  const views = [];
   return {
     views,
     colorImages: colors.map((color) => createColorImages(color, views)),
@@ -265,12 +266,12 @@ export const loader = async ({ request, params }) => {
         }
       }
     }`,
-    {
-      variables: {
-        id: `gid://shopify/Product/${id}`,
+      {
+        variables: {
+          id: `gid://shopify/Product/${id}`,
+        },
+        tries: 3,
       },
-      tries: 3,
-    },
     );
   } catch (error) {
     console.error("Shopify Admin API request failed", error);
@@ -301,10 +302,7 @@ export const loader = async ({ request, params }) => {
 
   if (existingLocationSettings) {
     try {
-      initialSettings = normalizeSettings(
-        colors,
-        existingLocationSettings,
-      );
+      initialSettings = normalizeSettings(colors, existingLocationSettings);
     } catch (e) {
       console.error("Error parsing metafield value", e);
     }
@@ -330,12 +328,22 @@ export const action = async ({ request, params }) => {
   const settings = JSON.parse(formData.get("settings"));
   const sanitizedSettings = {
     ...settings,
-    views: settings.views.map((view) => ({
-      ...view,
-      allowMultipleSelections: Boolean(view.allowMultipleSelections),
-      optional: Boolean(view.optional),
-      addOnProduct: normalizeAddOnProduct(view.addOnProduct),
-    })),
+    views: settings.views.map((view) => {
+      const { positions, ...viewSettings } = view;
+      delete viewSettings.addOnProduct;
+
+      return {
+        ...viewSettings,
+        allowMultipleSelections: Boolean(view.allowMultipleSelections),
+        optional: Boolean(view.optional),
+        enableCollapsible: Boolean(view.enableCollapsible),
+        collapsibleHeading: view.collapsibleHeading || view.name,
+        positions: positions.map((position) => ({
+          ...position,
+          addOnProduct: normalizeAddOnProduct(position.addOnProduct),
+        })),
+      };
+    }),
   };
 
   const response = await admin.graphql(
@@ -374,12 +382,8 @@ export const action = async ({ request, params }) => {
 };
 
 export default function ProductCustomiser() {
-  const {
-    product,
-    initialSettings,
-    productImages,
-    needsSideOptionDefaults,
-  } = useLoaderData();
+  const { product, initialSettings, productImages, needsSideOptionDefaults } =
+    useLoaderData();
   const fetcher = useFetcher();
   const navigate = useNavigate();
   const shopify = useAppBridge();
@@ -416,7 +420,7 @@ export default function ProductCustomiser() {
       pendingSaveSettings.current = null;
       shopify.toast.show(
         "Error saving: " +
-        fetcher.data.data.metafieldsSet.userErrors[0].message,
+          fetcher.data.data.metafieldsSet.userErrors[0].message,
       );
     }
   }, [fetcher.data, shopify]);
@@ -454,6 +458,11 @@ export default function ProductCustomiser() {
       colorImages: currentSettings.colorImages.map((colorImage) => {
         const images = { ...colorImage.images };
         delete images[viewId];
+        Object.keys(images).forEach((imageKey) => {
+          if (imageKey.startsWith(`${viewId}::position::`)) {
+            delete images[imageKey];
+          }
+        });
         return { ...colorImage, images };
       }),
     }));
@@ -497,26 +506,53 @@ export default function ProductCustomiser() {
     }));
   };
 
-  const updateViewAddOnProduct = (viewIdx, addOnProduct) => {
+  const updateViewField = (viewIdx, field, value) => {
     setSettings((currentSettings) => ({
       ...currentSettings,
       views: currentSettings.views.map((view, index) =>
-        index === viewIdx ? { ...view, addOnProduct } : view,
+        index === viewIdx ? { ...view, [field]: value } : view,
       ),
     }));
   };
 
-  const selectAddOnProduct = async (viewIdx) => {
-    const view = settings.views[viewIdx];
-    const selectionIds = view.addOnProduct?.id
+  const updateViewAllowMultipleSelections = (
+    viewIdx,
+    allowMultipleSelections,
+  ) => {
+    updateViewField(
+      viewIdx,
+      "allowMultipleSelections",
+      allowMultipleSelections,
+    );
+  };
+
+  const updatePositionAddOnProduct = (viewIdx, positionIdx, addOnProduct) => {
+    setSettings((currentSettings) => ({
+      ...currentSettings,
+      views: currentSettings.views.map((view, index) => {
+        if (index !== viewIdx) return view;
+
+        return {
+          ...view,
+          positions: view.positions.map((position, posIndex) =>
+            posIndex === positionIdx ? { ...position, addOnProduct } : position,
+          ),
+        };
+      }),
+    }));
+  };
+
+  const selectPositionAddOnProduct = async (viewIdx, positionIdx) => {
+    const position = settings.views[viewIdx]?.positions?.[positionIdx];
+    const selectionIds = position?.addOnProduct?.id
       ? [
-        {
-          id: view.addOnProduct.id,
-          variants: view.addOnProduct.variantId
-            ? [{ id: view.addOnProduct.variantId }]
-            : undefined,
-        },
-      ]
+          {
+            id: position.addOnProduct.id,
+            variants: position.addOnProduct.variantId
+              ? [{ id: position.addOnProduct.variantId }]
+              : undefined,
+          },
+        ]
       : [];
 
     const selected = await shopify.resourcePicker({
@@ -530,8 +566,9 @@ export default function ProductCustomiser() {
     if (!selectedProduct) return;
 
     const selectedVariant = selectedProduct.variants?.[0];
-    updateViewAddOnProduct(
+    updatePositionAddOnProduct(
       viewIdx,
+      positionIdx,
       normalizeAddOnProduct({
         ...selectedProduct,
         variant: selectedVariant,
@@ -539,8 +576,8 @@ export default function ProductCustomiser() {
     );
   };
 
-  const clearAddOnProduct = (viewIdx) => {
-    updateViewAddOnProduct(viewIdx, null);
+  const clearPositionAddOnProduct = (viewIdx, positionIdx) => {
+    updatePositionAddOnProduct(viewIdx, positionIdx, null);
   };
 
   const addPosition = (viewIdx) => {
@@ -560,6 +597,10 @@ export default function ProductCustomiser() {
   };
 
   const removePosition = (viewIdx, positionIdx) => {
+    const view = settings.views[viewIdx];
+    const positionId = view?.positions?.[positionIdx]?.id;
+    const imageKey = positionId ? getPositionImageKey(view.id, positionId) : "";
+
     setSettings((currentSettings) => ({
       ...currentSettings,
       views: currentSettings.views.map((view, index) => {
@@ -570,6 +611,13 @@ export default function ProductCustomiser() {
             (_, posIndex) => posIndex !== positionIdx,
           ),
         };
+      }),
+      colorImages: currentSettings.colorImages.map((colorImage) => {
+        const images = { ...colorImage.images };
+        if (imageKey) {
+          delete images[imageKey];
+        }
+        return { ...colorImage, images };
       }),
     }));
   };
@@ -604,9 +652,9 @@ export default function ProductCustomiser() {
           positions: view.positions.map((position, posIndex) =>
             posIndex === positionIdx
               ? {
-                ...position,
-                canvas: { ...position.canvas, [field]: numValue },
-              }
+                  ...position,
+                  canvas: { ...position.canvas, [field]: numValue },
+                }
               : position,
           ),
         };
@@ -614,12 +662,15 @@ export default function ProductCustomiser() {
     }));
   };
 
-  const clearImage = (colorIdx, viewId) => {
+  const clearImage = (colorIdx, imageKey) => {
     setSettings((currentSettings) => ({
       ...currentSettings,
       colorImages: currentSettings.colorImages.map((colorImage, index) =>
         index === colorIdx
-          ? { ...colorImage, images: { ...colorImage.images, [viewId]: "" } }
+          ? {
+              ...colorImage,
+              images: { ...colorImage.images, [imageKey]: "" },
+            }
           : colorImage,
       ),
     }));
@@ -633,9 +684,12 @@ export default function ProductCustomiser() {
       colorImages: currentSettings.colorImages.map((colorImage, index) =>
         index === activePicker.colorIdx
           ? {
-            ...colorImage,
-            images: { ...colorImage.images, [activePicker.viewId]: imageUrl },
-          }
+              ...colorImage,
+              images: {
+                ...colorImage.images,
+                [activePicker.imageKey]: imageUrl,
+              },
+            }
           : colorImage,
       ),
     }));
@@ -676,6 +730,93 @@ export default function ProductCustomiser() {
 
   const getImageForView = (colorIdx, viewId) =>
     settings.colorImages[colorIdx]?.images?.[viewId] || "";
+
+  const getImageForPosition = (colorIdx, viewId, positionId) =>
+    settings.colorImages[colorIdx]?.images?.[
+      getPositionImageKey(viewId, positionId)
+    ] ||
+    getImageForView(colorIdx, viewId) ||
+    "";
+
+  const hasPositionImageOverride = (colorIdx, viewId, positionId) =>
+    Boolean(
+      settings.colorImages[colorIdx]?.images?.[
+        getPositionImageKey(viewId, positionId)
+      ],
+    );
+
+  const renderImagePicker = (selectedImage) => (
+    <s-box padding="base" background="subdued" border="base" border-radius="base">
+      <s-stack direction="block" gap="base">
+        <s-stack
+          direction="inline"
+          justify-content="space-between"
+          align-items="center"
+        >
+          <s-text type="strong">Select Image</s-text>
+          <s-button-group>
+            <s-button
+              disabled={uploadingImage}
+              {...(uploadingImage ? { loading: true } : {})}
+            >
+              <label
+                style={{
+                  cursor: uploadingImage ? "default" : "pointer",
+                }}
+              >
+                Upload image
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={uploadingImage}
+                  onChange={uploadImage}
+                  style={{ display: "none" }}
+                />
+              </label>
+            </s-button>
+            <s-button variant="tertiary" onClick={() => setActivePicker(null)}>
+              Close
+            </s-button>
+          </s-button-group>
+        </s-stack>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))",
+            gap: "8px",
+          }}
+        >
+          {productImages.map((img) => (
+            <button
+              key={img.id}
+              type="button"
+              onClick={() => selectImage(img.url)}
+              style={{
+                cursor: "pointer",
+                border:
+                  selectedImage === img.url
+                    ? "2px solid #008060"
+                    : "1px solid #ddd",
+                borderRadius: "4px",
+                padding: "2px",
+                background: "transparent",
+                lineHeight: 0,
+              }}
+            >
+              <img
+                src={img.url}
+                alt={img.altText}
+                style={{
+                  width: "100%",
+                  display: "block",
+                }}
+              />
+            </button>
+          ))}
+        </div>
+      </s-stack>
+    </s-box>
+  );
 
   return (
     <s-page heading={product.title}>
@@ -730,208 +871,338 @@ export default function ProductCustomiser() {
                       gap: "12px",
                     }}
                   >
-                  <div style={{ flexGrow: 1, maxWidth: "320px" }}>
-                    <s-text-field
-                      label="Side name"
-                      value={view.name}
-                      onChange={(e) =>
-                        updateViewName(viewIdx, e.currentTarget.value)
-                      }
-                      autocomplete="off"
-                    />
-                  </div>
-                  <s-stack direction="inline" align-items="center" gap="small">
-                    <s-button onClick={() => toggleViewCollapsed(view.id)}>
-                      {isCollapsed ? "Expand" : "Collapse"}
-                    </s-button>
-                    <s-button
-                      variant="tertiary"
-                      tone="critical"
-                      disabled={settings.views.length === 1}
-                      onClick={() => removeView(viewIdx)}
+                    <div style={{ flexGrow: 1, maxWidth: "320px" }}>
+                      <s-text-field
+                        label="Side name"
+                        value={view.name}
+                        onChange={(e) =>
+                          updateViewName(viewIdx, e.currentTarget.value)
+                        }
+                        autocomplete="off"
+                      />
+                    </div>
+                    <s-stack
+                      direction="inline"
+                      align-items="center"
+                      gap="small"
                     >
-                      Remove Side
-                    </s-button>
-                  </s-stack>
-                </div>
+                      <s-button onClick={() => toggleViewCollapsed(view.id)}>
+                        {isCollapsed ? "Expand" : "Collapse"}
+                      </s-button>
+                      <s-button
+                        variant="tertiary"
+                        tone="critical"
+                        onClick={() => removeView(viewIdx)}
+                      >
+                        Remove Side
+                      </s-button>
+                    </s-stack>
+                  </div>
 
-                {!isCollapsed && (
-                  <>
-                    <s-box padding="base" background="subdued" border-radius="base">
-                      <s-stack direction="block" gap="small">
-                        <s-text type="strong">Add-on product</s-text>
-                        {view.addOnProduct ? (
-                          <s-stack
-                            direction="inline"
-                            align-items="center"
-                            justify-content="space-between"
-                            gap="base"
-                          >
-                            <s-stack
-                              direction="inline"
-                              align-items="center"
-                              gap="base"
-                            >
-                              <s-thumbnail
-                                src={view.addOnProduct.imageUrl}
-                                alt={view.addOnProduct.title}
-                                size="small"
-                              />
-                              <s-stack direction="block" gap="none">
-                                <s-text type="strong">
-                                  {view.addOnProduct.title}
-                                </s-text>
-                                {view.addOnProduct.variantTitle && (
-                                  <s-text color="subdued">
-                                    {view.addOnProduct.variantTitle}
-                                  </s-text>
-                                )}
-                              </s-stack>
-                            </s-stack>
-                            <s-stack
-                              direction="inline"
-                              align-items="center"
-                              gap="small"
-                            >
-                              <s-button onClick={() => selectAddOnProduct(viewIdx)}>
-                                Replace
-                              </s-button>
-                              <s-button
-                                tone="critical"
-                                icon="delete"
-                                onClick={() => clearAddOnProduct(viewIdx)}
-                              >
-                                Remove Product
-                              </s-button>
-                            </s-stack>
-                          </s-stack>
-                        ) : (
-                          <s-stack
-                            direction="inline"
-                            align-items="center"
-                            justify-content="space-between"
-                            gap="base"
-                          >
-                            <s-text color="subdued">
-                              Select the product that should be added to the cart
-                              for this side.
-                            </s-text>
-                            <s-button onClick={() => selectAddOnProduct(viewIdx)}>
-                              Select add-on product
-                            </s-button>
-                          </s-stack>
-                        )}
-                      </s-stack>
-                    </s-box>
-
-                    <s-stack direction="block" gap="base">
-                      {view.positions.map((position, positionIdx) => (
+                  {!isCollapsed && (
+                    <>
+                      <s-box
+                        padding="base"
+                        background="subdued"
+                        border-radius="base"
+                      >
                         <div
-                          key={position.id}
                           style={{
-                            border: "1px solid #e3e3e3",
-                            borderRadius: "6px",
-                            padding: "12px",
                             display: "flex",
-                            flexDirection: "column",
+                            alignItems: "flex-start",
                             gap: "10px",
                           }}
                         >
+                          <input
+                            type="checkbox"
+                            aria-label="Multi-option selector"
+                            checked={view.allowMultipleSelections}
+                            onChange={(event) =>
+                              updateViewAllowMultipleSelections(
+                                viewIdx,
+                                event.currentTarget.checked,
+                              )
+                            }
+                            style={{ marginTop: "3px" }}
+                          />
+                          <span
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                            }}
+                          >
+                            <span style={{ fontWeight: 600 }}>
+                              Multi-option selector
+                            </span>
+                            <span style={{ color: "#6d7175" }}>
+                              Allow customers to select more than one option in
+                              this block. The add-on product quantity should
+                              match the number of selected options.
+                            </span>
+                          </span>
+                        </div>
+                      </s-box>
+
+                      <s-box
+                        padding="base"
+                        background="subdued"
+                        border-radius="base"
+                      >
+                        <s-stack direction="block" gap="base">
                           <div
                             style={{
                               display: "flex",
-                              gap: "12px",
-                              alignItems: "end",
+                              alignItems: "flex-start",
+                              gap: "10px",
                             }}
                           >
-                            <div style={{ flexGrow: 1 }}>
-                              <s-text-field
-                                label="Position name"
-                                value={position.name}
+                            <input
+                              type="checkbox"
+                              aria-label="Enable collapsible block"
+                              checked={view.enableCollapsible}
+                              onChange={(event) =>
+                                updateViewField(
+                                  viewIdx,
+                                  "enableCollapsible",
+                                  event.currentTarget.checked,
+                                )
+                              }
+                              style={{ marginTop: "3px" }}
+                            />
+                            <span
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "4px",
+                              }}
+                            >
+                              <span style={{ fontWeight: 600 }}>
+                                Enable collapsible block
+                              </span>
+                              <span style={{ color: "#6d7175" }}>
+                                Use this block inside a collapsible tab on the
+                                frontend.
+                              </span>
+                            </span>
+                          </div>
+                          <s-text-field
+                            label="Collapsible heading"
+                            value={view.collapsibleHeading}
+                            onChange={(event) =>
+                              updateViewField(
+                                viewIdx,
+                                "collapsibleHeading",
+                                event.currentTarget.value,
+                              )
+                            }
+                            autocomplete="off"
+                          />
+                        </s-stack>
+                      </s-box>
+
+                      <s-stack direction="block" gap="base">
+                        {view.positions.map((position, positionIdx) => (
+                          <div
+                            key={position.id}
+                            style={{
+                              border: "1px solid #e3e3e3",
+                              borderRadius: "6px",
+                              padding: "12px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "10px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: "12px",
+                                alignItems: "end",
+                              }}
+                            >
+                              <div style={{ flexGrow: 1 }}>
+                                <s-text-field
+                                  label="Position name"
+                                  value={position.name}
+                                  onChange={(e) =>
+                                    updatePositionField(
+                                      viewIdx,
+                                      positionIdx,
+                                      "name",
+                                      e.currentTarget.value,
+                                    )
+                                  }
+                                  autocomplete="off"
+                                />
+                              </div>
+                              <s-button
+                                variant="tertiary"
+                                tone="critical"
+                                disabled={view.positions.length === 1}
+                                onClick={() =>
+                                  removePosition(viewIdx, positionIdx)
+                                }
+                              >
+                                Remove
+                              </s-button>
+                            </div>
+                            <div
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns:
+                                  "repeat(4, minmax(80px, 1fr))",
+                                gap: "8px",
+                              }}
+                            >
+                              <s-number-field
+                                label="Top %"
+                                value={String(position.canvas.top)}
                                 onChange={(e) =>
-                                  updatePositionField(
+                                  updateCanvasField(
                                     viewIdx,
                                     positionIdx,
-                                    "name",
+                                    "top",
                                     e.currentTarget.value,
                                   )
                                 }
-                                autocomplete="off"
+                              />
+                              <s-number-field
+                                label="Left %"
+                                value={String(position.canvas.left)}
+                                onChange={(e) =>
+                                  updateCanvasField(
+                                    viewIdx,
+                                    positionIdx,
+                                    "left",
+                                    e.currentTarget.value,
+                                  )
+                                }
+                              />
+                              <s-number-field
+                                label="Width %"
+                                value={String(position.canvas.width)}
+                                onChange={(e) =>
+                                  updateCanvasField(
+                                    viewIdx,
+                                    positionIdx,
+                                    "width",
+                                    e.currentTarget.value,
+                                  )
+                                }
+                              />
+                              <s-number-field
+                                label="Height %"
+                                value={String(position.canvas.height)}
+                                onChange={(e) =>
+                                  updateCanvasField(
+                                    viewIdx,
+                                    positionIdx,
+                                    "height",
+                                    e.currentTarget.value,
+                                  )
+                                }
                               />
                             </div>
-                            <s-button
-                              variant="tertiary"
-                              tone="critical"
-                              disabled={view.positions.length === 1}
-                              onClick={() => removePosition(viewIdx, positionIdx)}
+                            <s-box
+                              padding="base"
+                              background="subdued"
+                              border-radius="base"
                             >
-                              Remove
-                            </s-button>
+                              <s-stack direction="block" gap="small">
+                                <s-text type="strong">
+                                  Option add-on product
+                                </s-text>
+                                {position.addOnProduct ? (
+                                  <s-stack
+                                    direction="inline"
+                                    align-items="center"
+                                    justify-content="space-between"
+                                    gap="base"
+                                  >
+                                    <s-stack
+                                      direction="inline"
+                                      align-items="center"
+                                      gap="base"
+                                    >
+                                      <s-thumbnail
+                                        src={position.addOnProduct.imageUrl}
+                                        alt={position.addOnProduct.title}
+                                        size="small"
+                                      />
+                                      <s-stack direction="block" gap="none">
+                                        <s-text type="strong">
+                                          {position.addOnProduct.title}
+                                        </s-text>
+                                        {position.addOnProduct.variantTitle && (
+                                          <s-text color="subdued">
+                                            {position.addOnProduct.variantTitle}
+                                          </s-text>
+                                        )}
+                                      </s-stack>
+                                    </s-stack>
+                                    <s-stack
+                                      direction="inline"
+                                      align-items="center"
+                                      gap="small"
+                                    >
+                                      <s-button
+                                        onClick={() =>
+                                          selectPositionAddOnProduct(
+                                            viewIdx,
+                                            positionIdx,
+                                          )
+                                        }
+                                      >
+                                        Replace
+                                      </s-button>
+                                      <s-button
+                                        tone="critical"
+                                        icon="delete"
+                                        onClick={() =>
+                                          clearPositionAddOnProduct(
+                                            viewIdx,
+                                            positionIdx,
+                                          )
+                                        }
+                                      >
+                                        Remove Product
+                                      </s-button>
+                                    </s-stack>
+                                  </s-stack>
+                                ) : (
+                                  <s-stack
+                                    direction="inline"
+                                    align-items="center"
+                                    justify-content="space-between"
+                                    gap="base"
+                                  >
+                                    <s-text color="subdued">
+                                      Select the product that should be added
+                                      when this option is selected.
+                                    </s-text>
+                                    <s-button
+                                      onClick={() =>
+                                        selectPositionAddOnProduct(
+                                          viewIdx,
+                                          positionIdx,
+                                        )
+                                      }
+                                    >
+                                      Select add-on product
+                                    </s-button>
+                                  </s-stack>
+                                )}
+                              </s-stack>
+                            </s-box>
                           </div>
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "repeat(4, minmax(80px, 1fr))",
-                              gap: "8px",
-                            }}
-                          >
-                            <s-number-field
-                              label="Top %"
-                              value={String(position.canvas.top)}
-                              onChange={(e) =>
-                                updateCanvasField(
-                                  viewIdx,
-                                  positionIdx,
-                                  "top",
-                                  e.currentTarget.value,
-                                )
-                              }
-                            />
-                            <s-number-field
-                              label="Left %"
-                              value={String(position.canvas.left)}
-                              onChange={(e) =>
-                                updateCanvasField(
-                                  viewIdx,
-                                  positionIdx,
-                                  "left",
-                                  e.currentTarget.value,
-                                )
-                              }
-                            />
-                            <s-number-field
-                              label="Width %"
-                              value={String(position.canvas.width)}
-                              onChange={(e) =>
-                                updateCanvasField(
-                                  viewIdx,
-                                  positionIdx,
-                                  "width",
-                                  e.currentTarget.value,
-                                )
-                              }
-                            />
-                            <s-number-field
-                              label="Height %"
-                              value={String(position.canvas.height)}
-                              onChange={(e) =>
-                                updateCanvasField(
-                                  viewIdx,
-                                  positionIdx,
-                                  "height",
-                                  e.currentTarget.value,
-                                )
-                              }
-                            />
-                          </div>
-                        </div>
-                      ))}
-                      <s-button onClick={() => addPosition(viewIdx)}>
-                        Add Position
-                      </s-button>
-                    </s-stack>
-                  </>
-                )}
+                        ))}
+                        <s-button onClick={() => addPosition(viewIdx)}>
+                          Add Position
+                        </s-button>
+                      </s-stack>
+                    </>
+                  )}
                 </div>
               );
             })}
@@ -984,10 +1255,14 @@ export default function ProductCustomiser() {
                       }}
                     >
                       {settings.views.map((view) => {
-                        const selectedImage = getImageForView(colorIdx, view.id);
+                        const viewImageKey = view.id;
+                        const selectedImage = getImageForView(
+                          colorIdx,
+                          view.id,
+                        );
                         const pickerIsActive =
                           activePicker?.colorIdx === colorIdx &&
-                          activePicker?.viewId === view.id;
+                          activePicker?.imageKey === viewImageKey;
 
                         return (
                           <div
@@ -1018,7 +1293,10 @@ export default function ProductCustomiser() {
                             >
                               <s-button
                                 onClick={() =>
-                                  setActivePicker({ colorIdx, viewId: view.id })
+                                  setActivePicker({
+                                    colorIdx,
+                                    imageKey: viewImageKey,
+                                  })
                                 }
                               >
                                 {selectedImage ? "Change Image" : "Pick Image"}
@@ -1061,8 +1339,7 @@ export default function ProductCustomiser() {
                                       width: `${position.canvas.width}%`,
                                       height: `${position.canvas.height}%`,
                                       border: "2px dashed #008060",
-                                      backgroundColor:
-                                        "rgba(0, 128, 96, 0.1)",
+                                      backgroundColor: "rgba(0, 128, 96, 0.1)",
                                       color: "#202223",
                                       fontSize: "10px",
                                       fontWeight: 600,
@@ -1079,91 +1356,117 @@ export default function ProductCustomiser() {
                               </div>
                             )}
 
-                            {pickerIsActive && (
-                              <s-box
-                                padding="base"
-                                background="subdued"
-                                border="base"
-                                border-radius="base"
+                            {view.positions.length > 0 && (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "10px",
+                                }}
                               >
-                                <s-stack direction="block" gap="base">
-                                  <s-stack
-                                    direction="inline"
-                                    justify-content="space-between"
-                                    align-items="center"
-                                  >
-                                    <s-text type="strong">Select Image</s-text>
-                                    <s-button-group>
-                                      <s-button
-                                        disabled={uploadingImage}
-                                        {...(uploadingImage
-                                          ? { loading: true }
-                                          : {})}
+                                {view.positions.map((position) => {
+                                  const positionImageKey = getPositionImageKey(
+                                    view.id,
+                                    position.id,
+                                  );
+                                  const positionImage = getImageForPosition(
+                                    colorIdx,
+                                    view.id,
+                                    position.id,
+                                  );
+                                  const hasOverride = hasPositionImageOverride(
+                                    colorIdx,
+                                    view.id,
+                                    position.id,
+                                  );
+                                  const positionPickerIsActive =
+                                    activePicker?.colorIdx === colorIdx &&
+                                    activePicker?.imageKey === positionImageKey;
+
+                                  return (
+                                    <div
+                                      key={position.id}
+                                      style={{
+                                        borderTop: "1px solid #eee",
+                                        paddingTop: "10px",
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: "8px",
+                                      }}
+                                    >
+                                      <s-stack
+                                        direction="inline"
+                                        justify-content="space-between"
+                                        align-items="center"
+                                        gap="base"
                                       >
-                                        <label
-                                          style={{
-                                            cursor: uploadingImage
-                                              ? "default"
-                                              : "pointer",
-                                          }}
+                                        <s-stack direction="block" gap="none">
+                                          <s-text type="strong">
+                                            {position.name}
+                                          </s-text>
+                                          <s-text color="subdued">
+                                            {hasOverride
+                                              ? "Using custom area image"
+                                              : `Using ${view.name} image`}
+                                          </s-text>
+                                        </s-stack>
+                                        <s-stack
+                                          direction="inline"
+                                          align-items="center"
+                                          gap="small"
                                         >
-                                          Upload image
-                                          <input
-                                            type="file"
-                                            accept="image/*"
-                                            disabled={uploadingImage}
-                                            onChange={uploadImage}
-                                            style={{ display: "none" }}
-                                          />
-                                        </label>
-                                      </s-button>
-                                      <s-button
-                                        variant="tertiary"
-                                        onClick={() => setActivePicker(null)}
-                                      >
-                                        Close
-                                      </s-button>
-                                    </s-button-group>
-                                  </s-stack>
-                                  <div
-                                    style={{
-                                      display: "grid",
-                                      gridTemplateColumns:
-                                        "repeat(auto-fill, minmax(80px, 1fr))",
-                                      gap: "8px",
-                                    }}
-                                  >
-                                    {productImages.map((img) => (
-                                      <button
-                                        key={img.id}
-                                        type="button"
-                                        onClick={() => selectImage(img.url)}
-                                        style={{
-                                          cursor: "pointer",
-                                          border:
-                                            selectedImage === img.url
-                                              ? "2px solid #008060"
-                                              : "1px solid #ddd",
-                                          borderRadius: "4px",
-                                          padding: "2px",
-                                          background: "transparent",
-                                          lineHeight: 0,
-                                        }}
-                                      >
+                                          <s-button
+                                            onClick={() =>
+                                              setActivePicker({
+                                                colorIdx,
+                                                imageKey: positionImageKey,
+                                              })
+                                            }
+                                          >
+                                            {hasOverride
+                                              ? "Change Image"
+                                              : "Pick Image"}
+                                          </s-button>
+                                          {hasOverride && (
+                                            <s-button
+                                              variant="tertiary"
+                                              tone="critical"
+                                              onClick={() =>
+                                                clearImage(
+                                                  colorIdx,
+                                                  positionImageKey,
+                                                )
+                                              }
+                                            >
+                                              Clear
+                                            </s-button>
+                                          )}
+                                        </s-stack>
+                                      </s-stack>
+
+                                      {positionImage && (
                                         <img
-                                          src={img.url}
-                                          alt={img.altText}
+                                          src={positionImage}
+                                          alt={`${colorImage.color} ${view.name} ${position.name}`}
                                           style={{
-                                            width: "100%",
+                                            width: "96px",
+                                            maxWidth: "100%",
+                                            border: "1px solid #eee",
+                                            borderRadius: "4px",
                                             display: "block",
                                           }}
                                         />
-                                      </button>
-                                    ))}
-                                  </div>
-                                </s-stack>
-                              </s-box>
+                                      )}
+
+                                      {positionPickerIsActive &&
+                                        renderImagePicker(positionImage)}
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             )}
+
+                            {pickerIsActive && renderImagePicker(selectedImage)}
                           </div>
                         );
                       })}
@@ -1174,7 +1477,6 @@ export default function ProductCustomiser() {
             })}
           </s-stack>
         </s-section>
-
       </s-stack>
     </s-page>
   );

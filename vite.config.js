@@ -37,11 +37,12 @@ if (host === "localhost") {
 
 export default defineConfig({
   server: {
-    allowedHosts: [host],
+    allowedHosts: [host, ".ngrok-free.dev"],
     cors: {
       origin: [
         /^https:\/\/.*\.myshopify\.com$/,
         /^https:\/\/.*\.trycloudflare\.com$/,
+        /^https:\/\/.*\.ngrok-free\.dev$/,
         "http://localhost",
         "http://localhost:3000",
       ],
