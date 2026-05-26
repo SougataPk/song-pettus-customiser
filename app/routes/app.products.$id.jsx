@@ -707,6 +707,7 @@ export default function ProductCustomiser() {
     try {
       const formData = new FormData();
       formData.append("image", file);
+      formData.append("fileName", `customized-product-${Date.now()}`);
 
       const response = await fetch("/api/cloudinary", {
         method: "POST",

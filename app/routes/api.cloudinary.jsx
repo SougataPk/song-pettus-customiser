@@ -5,7 +5,10 @@ import { v2 as cloudinary } from "cloudinary";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, ngrok-skip-browser-warning",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Origin, Accept, ngrok-skip-browser-warning",
+  "Access-Control-Max-Age": "86400",
+  Vary: "Origin",
 };
 
 const jsonResponse = (body, init = {}) =>
@@ -15,6 +18,23 @@ const jsonResponse = (body, init = {}) =>
       ...corsHeaders,
       ...(init.headers || {}),
     },
+  });
+
+const uploadBuffer = (buffer, options) =>
+  new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      options,
+      (error, result) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve(result);
+      },
+    );
+
+    uploadStream.end(buffer);
   });
 
 const getUploadPayload = async (request) => {
@@ -28,11 +48,8 @@ const getUploadPayload = async (request) => {
       return {};
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const image = `data:${file.type || "application/octet-stream"};base64,${buffer.toString("base64")}`;
-
     return {
-      image,
+      buffer: Buffer.from(await file.arrayBuffer()),
       fileName:
         formData.get("fileName") ||
         file.name?.replace(/\.[^/.]+$/, "") ||
@@ -40,7 +57,7 @@ const getUploadPayload = async (request) => {
     };
   }
 
-  return request.json();
+  return {};
 };
 
 export const loader = async ({ request }) => {
@@ -51,15 +68,20 @@ export const loader = async ({ request }) => {
   return jsonResponse({ message: "Cloudinary upload endpoint is ready" });
 };
 
+export const headers = () => corsHeaders;
+
 export const action = async ({ request }) => {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  const { image, fileName } = await getUploadPayload(request);
+  const { buffer, fileName } = await getUploadPayload(request);
 
-  if (!image) {
-    return jsonResponse({ error: "Missing image" }, { status: 400 });
+  if (!buffer) {
+    return jsonResponse(
+      { error: "Missing image. Send multipart form data with an image file." },
+      { status: 400 },
+    );
   }
 
   if (
@@ -80,7 +102,7 @@ export const action = async ({ request }) => {
   });
 
   try {
-    const uploadResult = await cloudinary.uploader.upload(image, {
+    const uploadResult = await uploadBuffer(buffer, {
       public_id: fileName || `customized-product-${Date.now()}`,
       resource_type: "auto",
       folder: "shopify_custom_designs",
