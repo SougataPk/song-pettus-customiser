@@ -2,7 +2,7 @@
 
 client_id = "20931fc676b4429d5c8b2331a170bf82"
 name = "customiser"
-application_url = "https://example.com"
+application_url = "https://song-pettus-customiser.vercel.app"
 embedded = true
 
 [build]
@@ -25,7 +25,7 @@ api_version = "2026-07"
 scopes = "read_products,write_products,write_metaobjects,write_metaobject_definitions"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://song-pettus-customiser.vercel.app/api/auth" ]
 
 [product.metafields.app.demo_info]
 type = "single_line_text_field"
