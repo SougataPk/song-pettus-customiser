@@ -35,13 +35,13 @@ description = "Tracks products created by the Shopify app template for developme
   [product.metafields.app.demo_info.access]
   admin = "merchant_read_write"
 
-[product.metafields.custom.location_settings]
+[product.metafields.app.location_settings]
 type = "json"
 name = "Location Settings"
 description = "Customiser settings for product locations and positions"
 
-  [product.metafields.custom.location_settings.access]
-  admin = "merchant_read_write"
+  [product.metafields.app.location_settings.access]
+  admin = "merchant_read"
 
 [metaobjects.app.example]
 name = "Example"
