@@ -396,9 +396,7 @@ export default function ProductCustomiser() {
   const [collapsedViewIds, setCollapsedViewIds] = useState(
     () => new Set(initialSettings.views.map((view) => view.id)),
   );
-  const [collapsedColorNames, setCollapsedColorNames] = useState(
-    () => new Set(initialSettings.colorImages.map((item) => item.color)),
-  );
+  const [activePositionEditor, setActivePositionEditor] = useState(null);
   const [activePicker, setActivePicker] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const pendingSaveSettings = useRef(null);
@@ -482,18 +480,6 @@ export default function ProductCustomiser() {
         nextIds.add(viewId);
       }
       return nextIds;
-    });
-  };
-
-  const toggleColorCollapsed = (color) => {
-    setCollapsedColorNames((currentNames) => {
-      const nextNames = new Set(currentNames);
-      if (nextNames.has(color)) {
-        nextNames.delete(color);
-      } else {
-        nextNames.add(color);
-      }
-      return nextNames;
     });
   };
 
@@ -746,13 +732,446 @@ export default function ProductCustomiser() {
       ],
     );
 
+  const renderPositionOverlay = (position) => (
+    <div
+      title={position.name}
+      style={{
+        position: "absolute",
+        top: `${position.canvas.top}%`,
+        left: `${position.canvas.left}%`,
+        width: `${position.canvas.width}%`,
+        height: `${position.canvas.height}%`,
+        border: "2px dashed #008060",
+        backgroundColor: "rgba(0, 128, 96, 0.12)",
+        color: "#202223",
+        fontSize: "10px",
+        fontWeight: 600,
+        lineHeight: "12px",
+        overflow: "hidden",
+        padding: "2px",
+        pointerEvents: "none",
+        wordBreak: "break-word",
+      }}
+    >
+      {position.name}
+    </div>
+  );
+
+  const renderImagePreview = (imageUrl, altText, positions, size = "200px") => (
+    <div
+      style={{
+        width: size,
+        maxWidth: "100%",
+        position: "relative",
+        border: "1px solid #eee",
+        borderRadius: "4px",
+        backgroundColor: "#f4f4f4",
+      }}
+    >
+      <img
+        src={imageUrl}
+        alt={altText}
+        style={{ width: "100%", display: "block" }}
+      />
+      {positions.map(renderPositionOverlay)}
+    </div>
+  );
+
+  const renderSideImagesForView = (view, viewIdx) => (
+    <s-box padding="base" background="subdued" borderRadius="base">
+      <s-stack direction="block" gap="base">
+        <s-heading>Images for this block</s-heading>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: "16px",
+          }}
+        >
+          {settings.colorImages.map((colorImage, colorIdx) => {
+            const viewImageKey = view.id;
+            const selectedImage = getImageForView(colorIdx, view.id);
+            const pickerIsActive =
+              activePicker?.colorIdx === colorIdx &&
+              activePicker?.imageKey === viewImageKey;
+
+            return (
+              <div
+                key={`${view.id}-${colorImage.color}`}
+                style={{
+                  border: "1px solid #e3e3e3",
+                  borderRadius: "6px",
+                  padding: "12px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                  backgroundColor: "#fff",
+                }}
+              >
+                <s-stack
+                  direction="inline"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  gap="base"
+                >
+                  <s-text type="strong">{colorImage.color}</s-text>
+                  <s-button-group>
+                    <s-button
+                      onClick={() =>
+                        setActivePicker({
+                          colorIdx,
+                          imageKey: viewImageKey,
+                        })
+                      }
+                    >
+                      {selectedImage ? "Change Image" : "Pick Image"}
+                    </s-button>
+                    {selectedImage && (
+                      <s-button
+                        variant="tertiary"
+                        tone="critical"
+                        onClick={() => clearImage(colorIdx, view.id)}
+                      >
+                        Clear
+                      </s-button>
+                    )}
+                  </s-button-group>
+                </s-stack>
+
+                {selectedImage &&
+                  renderImagePreview(
+                    selectedImage,
+                    `${colorImage.color} ${view.name}`,
+                    view.positions,
+                  )}
+
+                {view.positions.map((position, positionIdx) => {
+                  const positionImageKey = getPositionImageKey(
+                    view.id,
+                    position.id,
+                  );
+                  const positionImage = getImageForPosition(
+                    colorIdx,
+                    view.id,
+                    position.id,
+                  );
+                  const hasOverride = hasPositionImageOverride(
+                    colorIdx,
+                    view.id,
+                    position.id,
+                  );
+                  const positionPickerIsActive =
+                    activePicker?.colorIdx === colorIdx &&
+                    activePicker?.imageKey === positionImageKey;
+
+                  return (
+                    <div
+                      key={position.id}
+                      style={{
+                        borderTop: "1px solid #eee",
+                        paddingTop: "10px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px",
+                      }}
+                    >
+                      <s-stack
+                        direction="inline"
+                        justifyContent="space-between"
+                        alignItems="center"
+                        gap="base"
+                      >
+                        <s-stack direction="block" gap="none">
+                          <s-text type="strong">{position.name}</s-text>
+                          <s-text color="subdued">
+                            {hasOverride
+                              ? "Using custom area image"
+                              : `Using ${view.name} image`}
+                          </s-text>
+                        </s-stack>
+                        <s-button-group>
+                          <s-button
+                            onClick={() =>
+                              setActivePositionEditor({
+                                viewIdx,
+                                positionIdx,
+                              })
+                            }
+                          >
+                            Edit Position
+                          </s-button>
+                          <s-button
+                            onClick={() =>
+                              setActivePicker({
+                                colorIdx,
+                                imageKey: positionImageKey,
+                              })
+                            }
+                          >
+                            {hasOverride ? "Change Image" : "Pick Image"}
+                          </s-button>
+                          {hasOverride && (
+                            <s-button
+                              variant="tertiary"
+                              tone="critical"
+                              onClick={() =>
+                                clearImage(colorIdx, positionImageKey)
+                              }
+                            >
+                              Clear
+                            </s-button>
+                          )}
+                        </s-button-group>
+                      </s-stack>
+
+                      {positionImage &&
+                        renderImagePreview(
+                          positionImage,
+                          `${colorImage.color} ${view.name} ${position.name}`,
+                          [position],
+                          "120px",
+                        )}
+
+                      {positionPickerIsActive && renderImagePicker(positionImage)}
+                    </div>
+                  );
+                })}
+
+                {pickerIsActive && renderImagePicker(selectedImage)}
+              </div>
+            );
+          })}
+        </div>
+      </s-stack>
+    </s-box>
+  );
+
+  const renderPositionEditor = () => {
+    if (!activePositionEditor) return null;
+
+    const { viewIdx, positionIdx } = activePositionEditor;
+    const view = settings.views[viewIdx];
+    const position = view?.positions?.[positionIdx];
+    if (!view || !position) return null;
+
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="position-editor-title"
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 1000,
+          backgroundColor: "rgba(0, 0, 0, 0.42)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "24px",
+        }}
+      >
+        <div
+          style={{
+            width: "min(1040px, 100%)",
+            maxHeight: "calc(100vh - 48px)",
+            overflow: "auto",
+            backgroundColor: "#fff",
+            borderRadius: "8px",
+            boxShadow: "0 24px 64px rgba(0, 0, 0, 0.22)",
+            padding: "20px",
+          }}
+        >
+          <s-stack direction="block" gap="base">
+            <s-stack
+              direction="inline"
+              justifyContent="space-between"
+              alignItems="center"
+              gap="base"
+            >
+              <s-stack direction="block" gap="none">
+                <s-heading id="position-editor-title">
+                  Edit {position.name}
+                </s-heading>
+                <s-text color="subdued">{view.name}</s-text>
+              </s-stack>
+              <s-button
+                variant="tertiary"
+                onClick={() => setActivePositionEditor(null)}
+              >
+                Close
+              </s-button>
+            </s-stack>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(4, minmax(96px, 1fr))",
+                gap: "8px",
+              }}
+            >
+              <s-number-field
+                label="Top %"
+                value={String(position.canvas.top)}
+                onChange={(e) =>
+                  updateCanvasField(
+                    viewIdx,
+                    positionIdx,
+                    "top",
+                    e.currentTarget.value,
+                  )
+                }
+              />
+              <s-number-field
+                label="Left %"
+                value={String(position.canvas.left)}
+                onChange={(e) =>
+                  updateCanvasField(
+                    viewIdx,
+                    positionIdx,
+                    "left",
+                    e.currentTarget.value,
+                  )
+                }
+              />
+              <s-number-field
+                label="Width %"
+                value={String(position.canvas.width)}
+                onChange={(e) =>
+                  updateCanvasField(
+                    viewIdx,
+                    positionIdx,
+                    "width",
+                    e.currentTarget.value,
+                  )
+                }
+              />
+              <s-number-field
+                label="Height %"
+                value={String(position.canvas.height)}
+                onChange={(e) =>
+                  updateCanvasField(
+                    viewIdx,
+                    positionIdx,
+                    "height",
+                    e.currentTarget.value,
+                  )
+                }
+              />
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                gap: "16px",
+              }}
+            >
+              {settings.colorImages.map((colorImage, colorIdx) => {
+                const previewImage = getImageForPosition(
+                  colorIdx,
+                  view.id,
+                  position.id,
+                );
+                const hasOverride = hasPositionImageOverride(
+                  colorIdx,
+                  view.id,
+                  position.id,
+                );
+                const positionImageKey = getPositionImageKey(
+                  view.id,
+                  position.id,
+                );
+                const pickerIsActive =
+                  activePicker?.colorIdx === colorIdx &&
+                  activePicker?.imageKey === positionImageKey;
+
+                return (
+                  <div
+                    key={`${view.id}-${position.id}-${colorImage.color}`}
+                    style={{
+                      border: "1px solid #e3e3e3",
+                      borderRadius: "6px",
+                      padding: "12px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px",
+                    }}
+                  >
+                    <s-stack
+                      direction="inline"
+                      justifyContent="space-between"
+                      alignItems="center"
+                      gap="base"
+                    >
+                      <s-stack direction="block" gap="none">
+                        <s-text type="strong">{colorImage.color}</s-text>
+                        <s-text color="subdued">
+                          {hasOverride
+                            ? "Custom image for this position"
+                            : `Using ${view.name} image`}
+                        </s-text>
+                      </s-stack>
+                      <s-button-group>
+                        <s-button
+                          onClick={() =>
+                            setActivePicker({
+                              colorIdx,
+                              imageKey: positionImageKey,
+                            })
+                          }
+                        >
+                          {hasOverride ? "Change Image" : "Pick Image"}
+                        </s-button>
+                        {hasOverride && (
+                          <s-button
+                            variant="tertiary"
+                            tone="critical"
+                            onClick={() => clearImage(colorIdx, positionImageKey)}
+                          >
+                            Clear
+                          </s-button>
+                        )}
+                      </s-button-group>
+                    </s-stack>
+
+                    {previewImage ? (
+                      renderImagePreview(
+                        previewImage,
+                        `${colorImage.color} ${view.name} ${position.name}`,
+                        [position],
+                        "100%",
+                      )
+                    ) : (
+                      <s-box
+                        padding="base"
+                        background="subdued"
+                        border="base"
+                        borderRadius="base"
+                      >
+                        <s-text color="subdued">
+                          Pick a block image to preview this position.
+                        </s-text>
+                      </s-box>
+                    )}
+
+                    {pickerIsActive && renderImagePicker(previewImage)}
+                  </div>
+                );
+              })}
+            </div>
+          </s-stack>
+        </div>
+      </div>
+    );
+  };
+
   const renderImagePicker = (selectedImage) => (
-    <s-box padding="base" background="subdued" border="base" border-radius="base">
+    <s-box padding="base" background="subdued" border="base" borderRadius="base">
       <s-stack direction="block" gap="base">
         <s-stack
           direction="inline"
-          justify-content="space-between"
-          align-items="center"
+          justifyContent="space-between"
+          alignItems="center"
         >
           <s-text type="strong">Select Image</s-text>
           <s-button-group>
@@ -884,7 +1303,7 @@ export default function ProductCustomiser() {
                     </div>
                     <s-stack
                       direction="inline"
-                      align-items="center"
+                      alignItems="center"
                       gap="small"
                     >
                       <s-button onClick={() => toggleViewCollapsed(view.id)}>
@@ -905,7 +1324,7 @@ export default function ProductCustomiser() {
                       <s-box
                         padding="base"
                         background="subdued"
-                        border-radius="base"
+                        borderRadius="base"
                       >
                         <div
                           style={{
@@ -948,7 +1367,7 @@ export default function ProductCustomiser() {
                       <s-box
                         padding="base"
                         background="subdued"
-                        border-radius="base"
+                        borderRadius="base"
                       >
                         <s-stack direction="block" gap="base">
                           <div
@@ -1048,67 +1467,33 @@ export default function ProductCustomiser() {
                                 Remove
                               </s-button>
                             </div>
-                            <div
-                              style={{
-                                display: "grid",
-                                gridTemplateColumns:
-                                  "repeat(4, minmax(80px, 1fr))",
-                                gap: "8px",
-                              }}
+                            <s-stack
+                              direction="inline"
+                              justifyContent="space-between"
+                              alignItems="center"
+                              gap="base"
                             >
-                              <s-number-field
-                                label="Top %"
-                                value={String(position.canvas.top)}
-                                onChange={(e) =>
-                                  updateCanvasField(
+                              <s-text color="subdued">
+                                Position: top {position.canvas.top}%, left{" "}
+                                {position.canvas.left}%, width{" "}
+                                {position.canvas.width}%, height{" "}
+                                {position.canvas.height}%
+                              </s-text>
+                              <s-button
+                                onClick={() =>
+                                  setActivePositionEditor({
                                     viewIdx,
                                     positionIdx,
-                                    "top",
-                                    e.currentTarget.value,
-                                  )
+                                  })
                                 }
-                              />
-                              <s-number-field
-                                label="Left %"
-                                value={String(position.canvas.left)}
-                                onChange={(e) =>
-                                  updateCanvasField(
-                                    viewIdx,
-                                    positionIdx,
-                                    "left",
-                                    e.currentTarget.value,
-                                  )
-                                }
-                              />
-                              <s-number-field
-                                label="Width %"
-                                value={String(position.canvas.width)}
-                                onChange={(e) =>
-                                  updateCanvasField(
-                                    viewIdx,
-                                    positionIdx,
-                                    "width",
-                                    e.currentTarget.value,
-                                  )
-                                }
-                              />
-                              <s-number-field
-                                label="Height %"
-                                value={String(position.canvas.height)}
-                                onChange={(e) =>
-                                  updateCanvasField(
-                                    viewIdx,
-                                    positionIdx,
-                                    "height",
-                                    e.currentTarget.value,
-                                  )
-                                }
-                              />
-                            </div>
+                              >
+                                Edit Position
+                              </s-button>
+                            </s-stack>
                             <s-box
                               padding="base"
                               background="subdued"
-                              border-radius="base"
+                              borderRadius="base"
                             >
                               <s-stack direction="block" gap="small">
                                 <s-text type="strong">
@@ -1117,13 +1502,13 @@ export default function ProductCustomiser() {
                                 {position.addOnProduct ? (
                                   <s-stack
                                     direction="inline"
-                                    align-items="center"
-                                    justify-content="space-between"
+                                    alignItems="center"
+                                    justifyContent="space-between"
                                     gap="base"
                                   >
                                     <s-stack
                                       direction="inline"
-                                      align-items="center"
+                                      alignItems="center"
                                       gap="base"
                                     >
                                       <s-thumbnail
@@ -1144,7 +1529,7 @@ export default function ProductCustomiser() {
                                     </s-stack>
                                     <s-stack
                                       direction="inline"
-                                      align-items="center"
+                                      alignItems="center"
                                       gap="small"
                                     >
                                       <s-button
@@ -1174,8 +1559,8 @@ export default function ProductCustomiser() {
                                 ) : (
                                   <s-stack
                                     direction="inline"
-                                    align-items="center"
-                                    justify-content="space-between"
+                                    alignItems="center"
+                                    justifyContent="space-between"
                                     gap="base"
                                   >
                                     <s-text color="subdued">
@@ -1202,6 +1587,7 @@ export default function ProductCustomiser() {
                           Add Position
                         </s-button>
                       </s-stack>
+                      {renderSideImagesForView(view, viewIdx)}
                     </>
                   )}
                 </div>
@@ -1211,274 +1597,8 @@ export default function ProductCustomiser() {
           </s-stack>
         </s-section>
 
-        <s-section>
-          <s-stack direction="block" gap="base">
-            <s-heading>Images by color and side</s-heading>
-            {settings.colorImages.map((colorImage, colorIdx) => {
-              const isColorCollapsed = collapsedColorNames.has(
-                colorImage.color,
-              );
-
-              return (
-                <div
-                  key={colorImage.color}
-                  style={{
-                    padding: "16px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    backgroundColor: "#fff",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: isColorCollapsed ? "12px" : "16px",
-                  }}
-                >
-                  <s-stack
-                    direction="inline"
-                    justify-content="space-between"
-                    align-items="center"
-                    gap="base"
-                  >
-                    <s-heading>Color: {colorImage.color}</s-heading>
-                    <s-button
-                      onClick={() => toggleColorCollapsed(colorImage.color)}
-                    >
-                      {isColorCollapsed ? "Expand" : "Collapse"}
-                    </s-button>
-                  </s-stack>
-
-                  {!isColorCollapsed && (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns:
-                          "repeat(auto-fit, minmax(240px, 1fr))",
-                        gap: "16px",
-                      }}
-                    >
-                      {settings.views.map((view) => {
-                        const viewImageKey = view.id;
-                        const selectedImage = getImageForView(
-                          colorIdx,
-                          view.id,
-                        );
-                        const pickerIsActive =
-                          activePicker?.colorIdx === colorIdx &&
-                          activePicker?.imageKey === viewImageKey;
-
-                        return (
-                          <div
-                            key={view.id}
-                            style={{
-                              border: "1px solid #e3e3e3",
-                              borderRadius: "6px",
-                              padding: "12px",
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "12px",
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontWeight: 600,
-                                fontSize: "14px",
-                                lineHeight: "20px",
-                                color: "#202223",
-                              }}
-                            >
-                              {view.name}
-                            </div>
-                            <s-stack
-                              direction="inline"
-                              align-items="center"
-                              gap="base"
-                            >
-                              <s-button
-                                onClick={() =>
-                                  setActivePicker({
-                                    colorIdx,
-                                    imageKey: viewImageKey,
-                                  })
-                                }
-                              >
-                                {selectedImage ? "Change Image" : "Pick Image"}
-                              </s-button>
-                              {selectedImage && (
-                                <s-button
-                                  variant="tertiary"
-                                  tone="critical"
-                                  onClick={() => clearImage(colorIdx, view.id)}
-                                >
-                                  Clear
-                                </s-button>
-                              )}
-                            </s-stack>
-
-                            {selectedImage && (
-                              <div
-                                style={{
-                                  width: "200px",
-                                  maxWidth: "100%",
-                                  position: "relative",
-                                  border: "1px solid #eee",
-                                  borderRadius: "4px",
-                                  backgroundColor: "#f4f4f4",
-                                }}
-                              >
-                                <img
-                                  src={selectedImage}
-                                  alt={`${colorImage.color} ${view.name}`}
-                                  style={{ width: "100%", display: "block" }}
-                                />
-                                {view.positions.map((position) => (
-                                  <div
-                                    key={position.id}
-                                    title={position.name}
-                                    style={{
-                                      position: "absolute",
-                                      top: `${position.canvas.top}%`,
-                                      left: `${position.canvas.left}%`,
-                                      width: `${position.canvas.width}%`,
-                                      height: `${position.canvas.height}%`,
-                                      border: "2px dashed #008060",
-                                      backgroundColor: "rgba(0, 128, 96, 0.1)",
-                                      color: "#202223",
-                                      fontSize: "10px",
-                                      fontWeight: 600,
-                                      lineHeight: "12px",
-                                      overflow: "hidden",
-                                      padding: "2px",
-                                      pointerEvents: "none",
-                                      wordBreak: "break-word",
-                                    }}
-                                  >
-                                    {position.name}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
-                            {view.positions.length > 0 && (
-                              <div
-                                style={{
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  gap: "10px",
-                                }}
-                              >
-                                {view.positions.map((position) => {
-                                  const positionImageKey = getPositionImageKey(
-                                    view.id,
-                                    position.id,
-                                  );
-                                  const positionImage = getImageForPosition(
-                                    colorIdx,
-                                    view.id,
-                                    position.id,
-                                  );
-                                  const hasOverride = hasPositionImageOverride(
-                                    colorIdx,
-                                    view.id,
-                                    position.id,
-                                  );
-                                  const positionPickerIsActive =
-                                    activePicker?.colorIdx === colorIdx &&
-                                    activePicker?.imageKey === positionImageKey;
-
-                                  return (
-                                    <div
-                                      key={position.id}
-                                      style={{
-                                        borderTop: "1px solid #eee",
-                                        paddingTop: "10px",
-                                        display: "flex",
-                                        flexDirection: "column",
-                                        gap: "8px",
-                                      }}
-                                    >
-                                      <s-stack
-                                        direction="inline"
-                                        justify-content="space-between"
-                                        align-items="center"
-                                        gap="base"
-                                      >
-                                        <s-stack direction="block" gap="none">
-                                          <s-text type="strong">
-                                            {position.name}
-                                          </s-text>
-                                          <s-text color="subdued">
-                                            {hasOverride
-                                              ? "Using custom area image"
-                                              : `Using ${view.name} image`}
-                                          </s-text>
-                                        </s-stack>
-                                        <s-stack
-                                          direction="inline"
-                                          align-items="center"
-                                          gap="small"
-                                        >
-                                          <s-button
-                                            onClick={() =>
-                                              setActivePicker({
-                                                colorIdx,
-                                                imageKey: positionImageKey,
-                                              })
-                                            }
-                                          >
-                                            {hasOverride
-                                              ? "Change Image"
-                                              : "Pick Image"}
-                                          </s-button>
-                                          {hasOverride && (
-                                            <s-button
-                                              variant="tertiary"
-                                              tone="critical"
-                                              onClick={() =>
-                                                clearImage(
-                                                  colorIdx,
-                                                  positionImageKey,
-                                                )
-                                              }
-                                            >
-                                              Clear
-                                            </s-button>
-                                          )}
-                                        </s-stack>
-                                      </s-stack>
-
-                                      {positionImage && (
-                                        <img
-                                          src={positionImage}
-                                          alt={`${colorImage.color} ${view.name} ${position.name}`}
-                                          style={{
-                                            width: "96px",
-                                            maxWidth: "100%",
-                                            border: "1px solid #eee",
-                                            borderRadius: "4px",
-                                            display: "block",
-                                          }}
-                                        />
-                                      )}
-
-                                      {positionPickerIsActive &&
-                                        renderImagePicker(positionImage)}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-
-                            {pickerIsActive && renderImagePicker(selectedImage)}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </s-stack>
-        </s-section>
       </s-stack>
+      {renderPositionEditor()}
     </s-page>
   );
 }
