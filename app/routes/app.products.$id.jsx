@@ -261,10 +261,7 @@ export const loader = async ({ request, params }) => {
             }
           }
         }
-        location_settings: metafield(namespace: "$app", key: "location_settings") {
-          jsonValue
-        }
-        legacy_location_settings: metafield(namespace: "custom", key: "location_settings") {
+        location_settings: metafield(namespace: "custom", key: "location_settings") {
           jsonValue
         }
       }
@@ -298,9 +295,7 @@ export const loader = async ({ request, params }) => {
 
   let initialSettings = normalizeSettings(colors);
 
-  const existingLocationSettings =
-    product.location_settings?.jsonValue ||
-    product.legacy_location_settings?.jsonValue;
+  const existingLocationSettings = product.location_settings?.jsonValue;
   const needsSideOptionDefaults = settingsMissingSideOptionDefaults(
     existingLocationSettings,
   );
@@ -372,7 +367,7 @@ export const action = async ({ request, params }) => {
         metafields: [
           {
             ownerId: `gid://shopify/Product/${id}`,
-            namespace: "$app",
+            namespace: "custom",
             key: "location_settings",
             type: "json",
             value: JSON.stringify(sanitizedSettings),
