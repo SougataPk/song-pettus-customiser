@@ -739,8 +739,44 @@ export default function ProductCustomiser() {
       ],
     );
 
+  const getOverlayOptionsForColor = (colorName = "") => {
+    const normalizedColor = colorName.trim().toLowerCase();
+    const darkColorTerms = [
+      "black",
+      "navy",
+      "blue",
+      "red",
+      "green",
+      "purple",
+      "maroon",
+      "brown",
+      "charcoal",
+      "dark",
+    ];
+    const lightColorTerms = [
+      "white",
+      "cream",
+      "ivory",
+      "yellow",
+      "grey",
+      "gray",
+      "silver",
+      "light",
+      "natural",
+    ];
+    const isDarkSurface =
+      darkColorTerms.some((term) => normalizedColor.includes(term)) &&
+      !lightColorTerms.some((term) => normalizedColor.includes(term));
+
+    return {
+      textColor: isDarkSurface ? "#f6f6f7" : "#202223",
+      textShadow: isDarkSurface ? "0 1px 2px rgba(0, 0, 0, 0.55)" : "none",
+    };
+  };
+
   const renderPositionOverlay = (position, options = {}) => {
-    const { compact = false } = options;
+    const { compact = false, textColor = "#202223", textShadow = "none" } =
+      options;
 
     return (
       <div
@@ -755,13 +791,18 @@ export default function ProductCustomiser() {
           backgroundColor: compact
             ? "rgba(0, 128, 96, 0.08)"
             : "rgba(0, 128, 96, 0.12)",
-          color: "#202223",
+          color: textColor,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
           fontSize: compact ? "0" : "10px",
           fontWeight: 600,
           lineHeight: compact ? "0" : "12px",
           overflow: "hidden",
           padding: compact ? "0" : "2px",
           pointerEvents: "none",
+          textAlign: "center",
+          textShadow,
           wordBreak: "break-word",
         }}
       >
@@ -959,6 +1000,8 @@ export default function ProductCustomiser() {
                           `${colorImage.color} ${view.name}`,
                           view.positions,
                           "100%",
+                          {},
+                          getOverlayOptionsForColor(colorImage.color),
                         )
                     : renderEmptyImageState(`Add a ${view.name} image`)}
 
@@ -1015,7 +1058,12 @@ export default function ProductCustomiser() {
                                 [position],
                                 "104px",
                                 {},
-                                { compact: true },
+                                {
+                                  compact: true,
+                                  ...getOverlayOptionsForColor(
+                                    colorImage.color,
+                                  ),
+                                },
                               )
                             ) : (
                               <div
@@ -1291,6 +1339,8 @@ export default function ProductCustomiser() {
                         `${colorImage.color} ${view.name} ${position.name}`,
                         [position],
                         "100%",
+                        {},
+                        getOverlayOptionsForColor(colorImage.color),
                       )
                     ) : (
                       <s-box
