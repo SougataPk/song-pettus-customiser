@@ -739,30 +739,36 @@ export default function ProductCustomiser() {
       ],
     );
 
-  const renderPositionOverlay = (position) => (
-    <div
-      title={position.name}
-      style={{
-        position: "absolute",
-        top: `${position.canvas.top}%`,
-        left: `${position.canvas.left}%`,
-        width: `${position.canvas.width}%`,
-        height: `${position.canvas.height}%`,
-        border: "2px dashed #008060",
-        backgroundColor: "rgba(0, 128, 96, 0.12)",
-        color: "#202223",
-        fontSize: "10px",
-        fontWeight: 600,
-        lineHeight: "12px",
-        overflow: "hidden",
-        padding: "2px",
-        pointerEvents: "none",
-        wordBreak: "break-word",
-      }}
-    >
-      {position.name}
-    </div>
-  );
+  const renderPositionOverlay = (position, options = {}) => {
+    const { compact = false } = options;
+
+    return (
+      <div
+        title={position.name}
+        style={{
+          position: "absolute",
+          top: `${position.canvas.top}%`,
+          left: `${position.canvas.left}%`,
+          width: `${position.canvas.width}%`,
+          height: `${position.canvas.height}%`,
+          border: compact ? "1px dashed #008060" : "2px dashed #008060",
+          backgroundColor: compact
+            ? "rgba(0, 128, 96, 0.08)"
+            : "rgba(0, 128, 96, 0.12)",
+          color: "#202223",
+          fontSize: compact ? "0" : "10px",
+          fontWeight: 600,
+          lineHeight: compact ? "0" : "12px",
+          overflow: "hidden",
+          padding: compact ? "0" : "2px",
+          pointerEvents: "none",
+          wordBreak: "break-word",
+        }}
+      >
+        {!compact && position.name}
+      </div>
+    );
+  };
 
   const renderImagePreview = (
     imageUrl,
@@ -770,6 +776,7 @@ export default function ProductCustomiser() {
     positions,
     size = "200px",
     imageStyle = {},
+    overlayOptions = {},
   ) => (
     <div
       style={{
@@ -792,7 +799,9 @@ export default function ProductCustomiser() {
           ...imageStyle,
         }}
       />
-      {positions.map(renderPositionOverlay)}
+      {positions.map((position) =>
+        renderPositionOverlay(position, overlayOptions),
+      )}
     </div>
   );
 
@@ -994,7 +1003,7 @@ export default function ProductCustomiser() {
                           <div
                             style={{
                               display: "grid",
-                              gridTemplateColumns: "88px minmax(0, 1fr)",
+                              gridTemplateColumns: "104px minmax(0, 1fr)",
                               gap: "12px",
                               alignItems: "start",
                             }}
@@ -1004,13 +1013,15 @@ export default function ProductCustomiser() {
                                 positionImage,
                                 `${colorImage.color} ${view.name} ${position.name}`,
                                 [position],
-                                "88px",
+                                "104px",
+                                {},
+                                { compact: true },
                               )
                             ) : (
                               <div
                                 style={{
-                                  width: "88px",
-                                  height: "88px",
+                                  width: "104px",
+                                  height: "104px",
                                   border: "1px dashed #c9cccf",
                                   borderRadius: "6px",
                                   backgroundColor: "#fff",
