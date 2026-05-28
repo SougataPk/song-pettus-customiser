@@ -1431,20 +1431,27 @@ export default function ProductCustomiser() {
                 <div
                   key={view.id}
                   style={{
-                    border: "1px solid #e3e3e3",
+                    border: isCollapsed
+                      ? "1px solid #d4d4d8"
+                      : "1px solid #b7babf",
                     borderRadius: "8px",
-                    backgroundColor: "#fff",
+                    backgroundColor: isCollapsed ? "#fff" : "#f6f6f7",
                     display: "flex",
                     flexDirection: "column",
                     overflow: "hidden",
-                    boxShadow: "0 1px 2px rgba(0, 0, 0, 0.04)",
+                    boxShadow: isCollapsed
+                      ? "0 1px 2px rgba(0, 0, 0, 0.04)"
+                      : "0 2px 8px rgba(0, 0, 0, 0.07)",
                   }}
                 >
                   <div
                     style={{
-                      padding: "16px",
-                      borderBottom: isCollapsed ? "none" : "1px solid #e3e3e3",
-                      backgroundColor: "#fafafa",
+                      padding: "16px 18px 16px 14px",
+                      borderBottom: isCollapsed ? "none" : "1px solid #d4d4d8",
+                      borderLeft: isCollapsed
+                        ? "4px solid #8c9196"
+                        : "4px solid #008060",
+                      backgroundColor: isCollapsed ? "#fafafa" : "#eef6f3",
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
@@ -1468,7 +1475,7 @@ export default function ProductCustomiser() {
                       gap="small"
                     >
                       <s-button
-                        variant={isCollapsed ? "primary" : undefined}
+                        variant="primary"
                         onClick={() => toggleViewCollapsed(view.id)}
                       >
                         {isCollapsed ? "Expand" : "Collapse"}
@@ -1486,7 +1493,11 @@ export default function ProductCustomiser() {
                     <>
                       <div
                         style={{
+                          margin: "16px",
                           padding: "16px",
+                          border: "1px solid #e3e3e3",
+                          borderRadius: "8px",
+                          backgroundColor: "#fff",
                           display: "flex",
                           flexDirection: "column",
                           gap: "16px",
