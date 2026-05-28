@@ -1630,16 +1630,6 @@ export default function ProductCustomiser() {
                                 {position.canvas.width}%, height{" "}
                                 {position.canvas.height}%
                               </s-text>
-                              <s-button
-                                onClick={() =>
-                                  setActivePositionEditor({
-                                    viewIdx,
-                                    positionIdx,
-                                  })
-                                }
-                              >
-                                Edit Position
-                              </s-button>
                             </s-stack>
                             <s-box
                               padding="base"
