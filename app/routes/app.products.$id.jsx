@@ -945,13 +945,12 @@ export default function ProductCustomiser() {
                   }}
                 >
                   {selectedImage
-                    ? renderImagePreview(
-                        selectedImage,
-                        `${colorImage.color} ${view.name}`,
-                        view.positions,
-                        "100%",
-                        { height: "240px" },
-                      )
+                      ? renderImagePreview(
+                          selectedImage,
+                          `${colorImage.color} ${view.name}`,
+                          view.positions,
+                          "100%",
+                        )
                     : renderEmptyImageState(`Add a ${view.name} image`)}
 
                   {pickerIsActive && renderImagePicker(selectedImage)}
@@ -1006,7 +1005,6 @@ export default function ProductCustomiser() {
                                 `${colorImage.color} ${view.name} ${position.name}`,
                                 [position],
                                 "88px",
-                                { height: "88px" },
                               )
                             ) : (
                               <div
