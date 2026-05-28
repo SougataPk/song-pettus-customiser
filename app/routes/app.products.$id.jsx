@@ -1417,7 +1417,13 @@ export default function ProductCustomiser() {
       <s-stack direction="block" gap="base">
         <s-section>
           <s-stack direction="block" gap="base">
-            <s-heading>Product sides and print positions</s-heading>
+            <s-stack direction="block" gap="none">
+              <s-heading>Product sides and print positions</s-heading>
+              <s-text color="subdued">
+                Configure each customisation block, its selectable print areas,
+                and the add-on product attached to each area.
+              </s-text>
+            </s-stack>
             {settings.views.map((view, viewIdx) => {
               const isCollapsed = collapsedViewIds.has(view.id);
 
@@ -1425,24 +1431,28 @@ export default function ProductCustomiser() {
                 <div
                   key={view.id}
                   style={{
-                    padding: "16px",
-                    border: "1px solid #ddd",
+                    border: "1px solid #e3e3e3",
                     borderRadius: "8px",
                     backgroundColor: "#fff",
                     display: "flex",
                     flexDirection: "column",
-                    gap: isCollapsed ? "12px" : "16px",
+                    overflow: "hidden",
+                    boxShadow: "0 1px 2px rgba(0, 0, 0, 0.04)",
                   }}
                 >
                   <div
                     style={{
+                      padding: "16px",
+                      borderBottom: isCollapsed ? "none" : "1px solid #e3e3e3",
+                      backgroundColor: "#fafafa",
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
-                      gap: "12px",
+                      gap: "16px",
+                      flexWrap: "wrap",
                     }}
                   >
-                    <div style={{ flexGrow: 1, maxWidth: "320px" }}>
+                    <div style={{ flexGrow: 1, maxWidth: "380px" }}>
                       <s-text-field
                         label="Side name"
                         value={view.name}
@@ -1457,11 +1467,13 @@ export default function ProductCustomiser() {
                       alignItems="center"
                       gap="small"
                     >
-                      <s-button onClick={() => toggleViewCollapsed(view.id)}>
+                      <s-button
+                        variant={isCollapsed ? "primary" : undefined}
+                        onClick={() => toggleViewCollapsed(view.id)}
+                      >
                         {isCollapsed ? "Expand" : "Collapse"}
                       </s-button>
                       <s-button
-                        variant="tertiary"
                         tone="critical"
                         onClick={() => removeView(viewIdx)}
                       >
@@ -1472,70 +1484,45 @@ export default function ProductCustomiser() {
 
                   {!isCollapsed && (
                     <>
-                      <s-box
-                        padding="base"
-                        background="subdued"
-                        borderRadius="base"
+                      <div
+                        style={{
+                          padding: "16px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "16px",
+                        }}
                       >
                         <div
                           style={{
-                            display: "flex",
-                            alignItems: "flex-start",
-                            gap: "10px",
+                            display: "grid",
+                            gridTemplateColumns:
+                              "repeat(auto-fit, minmax(280px, 1fr))",
+                            gap: "12px",
                           }}
                         >
-                          <input
-                            type="checkbox"
-                            aria-label="Multi-option selector"
-                            checked={view.allowMultipleSelections}
-                            onChange={(event) =>
-                              updateViewAllowMultipleSelections(
-                                viewIdx,
-                                event.currentTarget.checked,
-                              )
-                            }
-                            style={{ marginTop: "3px" }}
-                          />
-                          <span
+                          <label
                             style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "4px",
-                            }}
-                          >
-                            <span style={{ fontWeight: 600 }}>
-                              Multi-option selector
-                            </span>
-                            <span style={{ color: "#6d7175" }}>
-                              Allow customers to select more than one option in
-                              this block. The add-on product quantity should
-                              match the number of selected options.
-                            </span>
-                          </span>
-                        </div>
-                      </s-box>
-
-                      <s-box
-                        padding="base"
-                        background="subdued"
-                        borderRadius="base"
-                      >
-                        <s-stack direction="block" gap="base">
-                          <div
-                            style={{
+                              border: view.allowMultipleSelections
+                                ? "1px solid #008060"
+                                : "1px solid #e3e3e3",
+                              borderRadius: "8px",
+                              backgroundColor: view.allowMultipleSelections
+                                ? "rgba(0, 128, 96, 0.06)"
+                                : "#fafafa",
+                              padding: "14px",
                               display: "flex",
                               alignItems: "flex-start",
                               gap: "10px",
+                              cursor: "pointer",
                             }}
                           >
                             <input
                               type="checkbox"
-                              aria-label="Enable collapsible block"
-                              checked={view.enableCollapsible}
+                              aria-label="Multi-option selector"
+                              checked={view.allowMultipleSelections}
                               onChange={(event) =>
-                                updateViewField(
+                                updateViewAllowMultipleSelections(
                                   viewIdx,
-                                  "enableCollapsible",
                                   event.currentTarget.checked,
                                 )
                               }
@@ -1549,192 +1536,294 @@ export default function ProductCustomiser() {
                               }}
                             >
                               <span style={{ fontWeight: 600 }}>
-                                Enable collapsible block
+                                Multi-option selector
                               </span>
                               <span style={{ color: "#6d7175" }}>
-                                Use this block inside a collapsible tab on the
-                                frontend.
+                                Allow customers to select more than one option
+                                in this block.
                               </span>
                             </span>
-                          </div>
-                          <s-text-field
-                            label="Collapsible heading"
-                            value={view.collapsibleHeading}
-                            onChange={(event) =>
-                              updateViewField(
-                                viewIdx,
-                                "collapsibleHeading",
-                                event.currentTarget.value,
-                              )
-                            }
-                            autocomplete="off"
-                          />
-                        </s-stack>
-                      </s-box>
+                          </label>
 
-                      <s-stack direction="block" gap="base">
-                        {view.positions.map((position, positionIdx) => (
                           <div
-                            key={position.id}
                             style={{
-                              border: "1px solid #e3e3e3",
-                              borderRadius: "6px",
-                              padding: "12px",
+                              border: view.enableCollapsible
+                                ? "1px solid #008060"
+                                : "1px solid #e3e3e3",
+                              borderRadius: "8px",
+                              backgroundColor: view.enableCollapsible
+                                ? "rgba(0, 128, 96, 0.06)"
+                                : "#fafafa",
+                              padding: "14px",
                               display: "flex",
                               flexDirection: "column",
-                              gap: "10px",
+                              gap: "12px",
                             }}
                           >
-                            <div
+                            <label
                               style={{
                                 display: "flex",
-                                gap: "12px",
-                                alignItems: "end",
+                                alignItems: "flex-start",
+                                gap: "10px",
+                                cursor: "pointer",
                               }}
                             >
-                              <div style={{ flexGrow: 1 }}>
-                                <s-text-field
-                                  label="Position name"
-                                  value={position.name}
-                                  onChange={(e) =>
-                                    updatePositionField(
-                                      viewIdx,
-                                      positionIdx,
-                                      "name",
-                                      e.currentTarget.value,
-                                    )
-                                  }
-                                  autocomplete="off"
-                                />
-                              </div>
-                              <s-button
-                                variant="tertiary"
-                                tone="critical"
-                                disabled={view.positions.length === 1}
-                                onClick={() =>
-                                  removePosition(viewIdx, positionIdx)
+                              <input
+                                type="checkbox"
+                                aria-label="Enable collapsible block"
+                                checked={view.enableCollapsible}
+                                onChange={(event) =>
+                                  updateViewField(
+                                    viewIdx,
+                                    "enableCollapsible",
+                                    event.currentTarget.checked,
+                                  )
                                 }
+                                style={{ marginTop: "3px" }}
+                              />
+                              <span
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "4px",
+                                }}
                               >
-                                Remove
-                              </s-button>
-                            </div>
-                            <s-stack
-                              direction="inline"
-                              justifyContent="space-between"
-                              alignItems="center"
-                              gap="base"
-                            >
-                              <s-text color="subdued">
-                                Position: top {position.canvas.top}%, left{" "}
-                                {position.canvas.left}%, width{" "}
-                                {position.canvas.width}%, height{" "}
-                                {position.canvas.height}%
-                              </s-text>
-                            </s-stack>
-                            <s-box
-                              padding="base"
-                              background="subdued"
-                              borderRadius="base"
-                            >
-                              <s-stack direction="block" gap="small">
-                                <s-text type="strong">
-                                  Option add-on product
-                                </s-text>
-                                {position.addOnProduct ? (
-                                  <s-stack
-                                    direction="inline"
-                                    alignItems="center"
-                                    justifyContent="space-between"
-                                    gap="base"
-                                  >
-                                    <s-stack
-                                      direction="inline"
-                                      alignItems="center"
-                                      gap="base"
-                                    >
-                                      <s-thumbnail
-                                        src={position.addOnProduct.imageUrl}
-                                        alt={position.addOnProduct.title}
-                                        size="small"
-                                      />
-                                      <s-stack direction="block" gap="none">
-                                        <s-text type="strong">
-                                          {position.addOnProduct.title}
-                                        </s-text>
-                                        {position.addOnProduct.variantTitle && (
-                                          <s-text color="subdued">
-                                            {position.addOnProduct.variantTitle}
-                                          </s-text>
-                                        )}
-                                      </s-stack>
-                                    </s-stack>
-                                    <s-stack
-                                      direction="inline"
-                                      alignItems="center"
-                                      gap="small"
-                                    >
-                                      <s-button
-                                        onClick={() =>
-                                          selectPositionAddOnProduct(
-                                            viewIdx,
-                                            positionIdx,
-                                          )
-                                        }
-                                      >
-                                        Replace
-                                      </s-button>
-                                      <s-button
-                                        tone="critical"
-                                        icon="delete"
-                                        onClick={() =>
-                                          clearPositionAddOnProduct(
-                                            viewIdx,
-                                            positionIdx,
-                                          )
-                                        }
-                                      >
-                                        Remove Product
-                                      </s-button>
-                                    </s-stack>
-                                  </s-stack>
-                                ) : (
-                                  <s-stack
-                                    direction="inline"
-                                    alignItems="center"
-                                    justifyContent="space-between"
-                                    gap="base"
-                                  >
-                                    <s-text color="subdued">
-                                      Select the product that should be added
-                                      when this option is selected.
-                                    </s-text>
-                                    <s-button
-                                      onClick={() =>
-                                        selectPositionAddOnProduct(
-                                          viewIdx,
-                                          positionIdx,
-                                        )
-                                      }
-                                    >
-                                      Select add-on product
-                                    </s-button>
-                                  </s-stack>
-                                )}
-                              </s-stack>
-                            </s-box>
+                                <span style={{ fontWeight: 600 }}>
+                                  Collapsible block
+                                </span>
+                                <span style={{ color: "#6d7175" }}>
+                                  Use this side inside a collapsible frontend
+                                  tab.
+                                </span>
+                              </span>
+                            </label>
+                            <s-text-field
+                              label="Collapsible heading"
+                              value={view.collapsibleHeading}
+                              onChange={(event) =>
+                                updateViewField(
+                                  viewIdx,
+                                  "collapsibleHeading",
+                                  event.currentTarget.value,
+                                )
+                              }
+                              autocomplete="off"
+                            />
                           </div>
-                        ))}
-                        <s-button onClick={() => addPosition(viewIdx)}>
-                          Add Position
-                        </s-button>
-                      </s-stack>
+                        </div>
+
+                        <s-stack direction="block" gap="base">
+                          {view.positions.map((position, positionIdx) => (
+                            <div
+                              key={position.id}
+                              style={{
+                                border: "1px solid #e3e3e3",
+                                borderRadius: "8px",
+                                display: "flex",
+                                flexDirection: "column",
+                                overflow: "hidden",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  padding: "12px 14px",
+                                  borderBottom: "1px solid #e3e3e3",
+                                  backgroundColor: "#fafafa",
+                                  display: "flex",
+                                  gap: "12px",
+                                  alignItems: "end",
+                                }}
+                              >
+                                <div style={{ flexGrow: 1 }}>
+                                  <s-text-field
+                                    label="Position name"
+                                    value={position.name}
+                                    onChange={(e) =>
+                                      updatePositionField(
+                                        viewIdx,
+                                        positionIdx,
+                                        "name",
+                                        e.currentTarget.value,
+                                      )
+                                    }
+                                    autocomplete="off"
+                                  />
+                                </div>
+                                <s-button
+                                  tone="critical"
+                                  disabled={view.positions.length === 1}
+                                  onClick={() =>
+                                    removePosition(viewIdx, positionIdx)
+                                  }
+                                >
+                                  Remove
+                                </s-button>
+                              </div>
+
+                              <div
+                                style={{
+                                  padding: "14px",
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "12px",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: "8px",
+                                  }}
+                                >
+                                  {[
+                                    ["Top", position.canvas.top],
+                                    ["Left", position.canvas.left],
+                                    ["Width", position.canvas.width],
+                                    ["Height", position.canvas.height],
+                                  ].map(([label, value]) => (
+                                    <span
+                                      key={label}
+                                      style={{
+                                        border: "1px solid #e3e3e3",
+                                        borderRadius: "999px",
+                                        backgroundColor: "#f6f6f7",
+                                        color: "#6d7175",
+                                        fontSize: "12px",
+                                        fontWeight: 600,
+                                        padding: "4px 10px",
+                                      }}
+                                    >
+                                      {label}: {value}%
+                                    </span>
+                                  ))}
+                                </div>
+
+                                <div
+                                  style={{
+                                    border: "1px solid #e3e3e3",
+                                    borderRadius: "8px",
+                                    backgroundColor: "#fafafa",
+                                    padding: "12px",
+                                  }}
+                                >
+                                  <s-stack direction="block" gap="small">
+                                    <s-text type="strong">
+                                      Option add-on product
+                                    </s-text>
+                                    {position.addOnProduct ? (
+                                      <s-stack
+                                        direction="inline"
+                                        alignItems="center"
+                                        justifyContent="space-between"
+                                        gap="base"
+                                      >
+                                        <s-stack
+                                          direction="inline"
+                                          alignItems="center"
+                                          gap="base"
+                                        >
+                                          <s-thumbnail
+                                            src={
+                                              position.addOnProduct.imageUrl
+                                            }
+                                            alt={position.addOnProduct.title}
+                                            size="small"
+                                          />
+                                          <s-stack direction="block" gap="none">
+                                            <s-text type="strong">
+                                              {position.addOnProduct.title}
+                                            </s-text>
+                                            {position.addOnProduct
+                                              .variantTitle && (
+                                              <s-text color="subdued">
+                                                {
+                                                  position.addOnProduct
+                                                    .variantTitle
+                                                }
+                                              </s-text>
+                                            )}
+                                          </s-stack>
+                                        </s-stack>
+                                        <s-stack
+                                          direction="inline"
+                                          alignItems="center"
+                                          gap="small"
+                                        >
+                                          <s-button
+                                            variant="primary"
+                                            onClick={() =>
+                                              selectPositionAddOnProduct(
+                                                viewIdx,
+                                                positionIdx,
+                                              )
+                                            }
+                                          >
+                                            Replace
+                                          </s-button>
+                                          <s-button
+                                            tone="critical"
+                                            icon="delete"
+                                            onClick={() =>
+                                              clearPositionAddOnProduct(
+                                                viewIdx,
+                                                positionIdx,
+                                              )
+                                            }
+                                          >
+                                            Remove Product
+                                          </s-button>
+                                        </s-stack>
+                                      </s-stack>
+                                    ) : (
+                                      <s-stack
+                                        direction="inline"
+                                        alignItems="center"
+                                        justifyContent="space-between"
+                                        gap="base"
+                                      >
+                                        <s-text color="subdued">
+                                          Select the product that should be
+                                          added when this option is selected.
+                                        </s-text>
+                                        <s-button
+                                          variant="primary"
+                                          onClick={() =>
+                                            selectPositionAddOnProduct(
+                                              viewIdx,
+                                              positionIdx,
+                                            )
+                                          }
+                                        >
+                                          Select add-on product
+                                        </s-button>
+                                      </s-stack>
+                                    )}
+                                  </s-stack>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          <div>
+                            <s-button
+                              variant="primary"
+                              onClick={() => addPosition(viewIdx)}
+                            >
+                              Add Position
+                            </s-button>
+                          </div>
+                        </s-stack>
+                      </div>
                       {renderSideImagesForView(view, viewIdx)}
                     </>
                   )}
                 </div>
               );
             })}
-            <s-button onClick={addView}>Add Side</s-button>
+            <div>
+              <s-button variant="primary" onClick={addView}>
+                Add Side
+              </s-button>
+            </div>
           </s-stack>
         </s-section>
 
