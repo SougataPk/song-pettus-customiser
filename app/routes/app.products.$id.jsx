@@ -662,31 +662,35 @@ export default function ProductCustomiser() {
     }));
   };
 
-  const selectImage = (imageUrl) => {
-    if (!activePicker) return;
-
+  const assignImage = (colorIdx, imageKey, imageUrl) => {
     setSettings((currentSettings) => ({
       ...currentSettings,
       colorImages: currentSettings.colorImages.map((colorImage, index) =>
-        index === activePicker.colorIdx
+        index === colorIdx
           ? {
               ...colorImage,
               images: {
                 ...colorImage.images,
-                [activePicker.imageKey]: imageUrl,
+                [imageKey]: imageUrl,
               },
             }
           : colorImage,
       ),
     }));
+  };
+
+  const selectImage = (imageUrl) => {
+    if (!activePicker) return;
+
+    assignImage(activePicker.colorIdx, activePicker.imageKey, imageUrl);
     setActivePicker(null);
   };
 
-  const uploadImage = async (event) => {
+  const uploadImageForTarget = async (event, targetPicker = activePicker) => {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
 
-    if (!file || !activePicker) return;
+    if (!file || !targetPicker) return;
 
     setUploadingImage(true);
 
@@ -705,7 +709,8 @@ export default function ProductCustomiser() {
         throw new Error(result.error || "Image upload failed");
       }
 
-      selectImage(result.imageUrl);
+      assignImage(targetPicker.colorIdx, targetPicker.imageKey, result.imageUrl);
+      setActivePicker(null);
       shopify.toast.show("Image uploaded successfully");
     } catch (error) {
       console.error("Cloudinary upload failed", error);
@@ -714,6 +719,8 @@ export default function ProductCustomiser() {
       setUploadingImage(false);
     }
   };
+
+  const uploadImage = (event) => uploadImageForTarget(event);
 
   const getImageForView = (colorIdx, viewId) =>
     settings.colorImages[colorIdx]?.images?.[viewId] || "";
@@ -777,6 +784,30 @@ export default function ProductCustomiser() {
     </div>
   );
 
+  const renderUploadButton = (colorIdx, imageKey, hasImage) => (
+    <s-button
+      disabled={uploadingImage}
+      {...(uploadingImage ? { loading: true } : {})}
+    >
+      <label
+        style={{
+          cursor: uploadingImage ? "default" : "pointer",
+        }}
+      >
+        {hasImage ? "Change File" : "Add File"}
+        <input
+          type="file"
+          accept="image/*"
+          disabled={uploadingImage}
+          onChange={(event) =>
+            uploadImageForTarget(event, { colorIdx, imageKey })
+          }
+          style={{ display: "none" }}
+        />
+      </label>
+    </s-button>
+  );
+
   const renderSideImagesForView = (view, viewIdx) => (
     <s-box padding="base" background="subdued" borderRadius="base">
       <s-stack direction="block" gap="base">
@@ -815,7 +846,15 @@ export default function ProductCustomiser() {
                   gap="base"
                 >
                   <s-text type="strong">{colorImage.color}</s-text>
-                  <s-button-group>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "8px",
+                      justifyContent: "flex-end",
+                    }}
+                  >
+                    {renderUploadButton(colorIdx, viewImageKey, selectedImage)}
                     <s-button
                       onClick={() =>
                         setActivePicker({
@@ -835,7 +874,7 @@ export default function ProductCustomiser() {
                         Clear
                       </s-button>
                     )}
-                  </s-button-group>
+                  </div>
                 </s-stack>
 
                 {selectedImage &&
@@ -889,7 +928,19 @@ export default function ProductCustomiser() {
                               : `Using ${view.name} image`}
                           </s-text>
                         </s-stack>
-                        <s-button-group>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "8px",
+                            justifyContent: "flex-end",
+                          }}
+                        >
+                          {renderUploadButton(
+                            colorIdx,
+                            positionImageKey,
+                            hasOverride,
+                          )}
                           <s-button
                             onClick={() =>
                               setActivePositionEditor({
@@ -921,7 +972,7 @@ export default function ProductCustomiser() {
                               Clear
                             </s-button>
                           )}
-                        </s-button-group>
+                        </div>
                       </s-stack>
 
                       {positionImage &&
@@ -1111,7 +1162,19 @@ export default function ProductCustomiser() {
                             : `Using ${view.name} image`}
                         </s-text>
                       </s-stack>
-                      <s-button-group>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                          justifyContent: "flex-end",
+                        }}
+                      >
+                        {renderUploadButton(
+                          colorIdx,
+                          positionImageKey,
+                          hasOverride,
+                        )}
                         <s-button
                           onClick={() =>
                             setActivePicker({
@@ -1131,7 +1194,7 @@ export default function ProductCustomiser() {
                             Clear
                           </s-button>
                         )}
-                      </s-button-group>
+                      </div>
                     </s-stack>
 
                     {previewImage ? (
