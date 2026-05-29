@@ -77,13 +77,26 @@ const normalizePosition = (
   },
 });
 
+const normalizePrice = (price) => {
+  if (!price) return "";
+
+  if (typeof price === "object") {
+    return price.amount || price.value || "";
+  }
+
+  return String(price);
+};
+
 const normalizeAddOnProduct = (product) => {
   if (!product?.id || !product?.title) return null;
 
   const imageUrl =
     product.imageUrl ||
+    product.image?.url ||
     product.image?.originalSrc ||
+    product.featuredImage?.url ||
     product.images?.[0]?.originalSrc ||
+    product.images?.[0]?.url ||
     "";
   const variant = product.variant || product.variants?.[0] || null;
 
@@ -92,8 +105,9 @@ const normalizeAddOnProduct = (product) => {
     title: product.title,
     imageUrl,
     variantId: product.variantId || variant?.id || "",
-    variantTitle: product.variantTitle || variant?.displayName || "",
-    price: product.price || variant?.price || variant?.price?.amount || "",
+    variantTitle:
+      product.variantTitle || variant?.displayName || variant?.title || "",
+    price: normalizePrice(product.price || variant?.price),
   };
 };
 
@@ -321,10 +335,106 @@ export const loader = async ({ request, params }) => {
   };
 };
 
+const fetchAddOnProduct = async (admin, productId, variantId) => {
+  if (variantId) {
+    const variantResponse = await admin.graphql(
+      `#graphql
+      query getAddOnVariant($id: ID!) {
+        node(id: $id) {
+          ... on ProductVariant {
+            id
+            title
+            displayName
+            price
+            image {
+              url
+            }
+            product {
+              id
+              title
+              featuredImage {
+                url
+              }
+            }
+          }
+        }
+      }`,
+      {
+        variables: { id: variantId },
+        tries: 3,
+      },
+    );
+    const variantJson = await variantResponse.json();
+    const variant = variantJson.data?.node;
+
+    if (variant?.product) {
+      return normalizeAddOnProduct({
+        id: variant.product.id,
+        title: variant.product.title,
+        imageUrl: variant.image?.url || variant.product.featuredImage?.url,
+        variant,
+      });
+    }
+  }
+
+  const productResponse = await admin.graphql(
+    `#graphql
+    query getAddOnProduct($id: ID!) {
+      product(id: $id) {
+        id
+        title
+        featuredImage {
+          url
+        }
+        variants(first: 1) {
+          nodes {
+            id
+            title
+            displayName
+            price
+            image {
+              url
+            }
+          }
+        }
+      }
+    }`,
+    {
+      variables: { id: productId },
+      tries: 3,
+    },
+  );
+  const productJson = await productResponse.json();
+  const product = productJson.data?.product;
+
+  return normalizeAddOnProduct({
+    ...product,
+    variant: product?.variants?.nodes?.[0],
+  });
+};
+
 export const action = async ({ request, params }) => {
   const { admin } = await authenticate.admin(request);
   const { id } = params;
   const formData = await request.formData();
+
+  if (formData.get("intent") === "resolveAddOnProduct") {
+    const addOnProduct = await fetchAddOnProduct(
+      admin,
+      formData.get("productId"),
+      formData.get("variantId"),
+    );
+
+    if (!addOnProduct) {
+      return Response.json(
+        { error: "Could not load selected add-on product" },
+        { status: 404 },
+      );
+    }
+
+    return Response.json({ addOnProduct });
+  }
+
   const settings = JSON.parse(formData.get("settings"));
   const sanitizedSettings = {
     ...settings,
@@ -528,6 +638,28 @@ export default function ProductCustomiser() {
     }));
   };
 
+  const resolveAddOnProduct = async (selectedProduct, selectedVariant) => {
+    const formData = new FormData();
+    formData.append("intent", "resolveAddOnProduct");
+    formData.append("productId", selectedProduct.id);
+
+    if (selectedVariant?.id) {
+      formData.append("variantId", selectedVariant.id);
+    }
+
+    const response = await fetch(".", {
+      method: "POST",
+      body: formData,
+    });
+    const result = await response.json();
+
+    if (!response.ok || !result.addOnProduct) {
+      throw new Error(result.error || "Could not load add-on product details");
+    }
+
+    return result.addOnProduct;
+  };
+
   const selectPositionAddOnProduct = async (viewIdx, positionIdx) => {
     const position = settings.views[viewIdx]?.positions?.[positionIdx];
     const selectionIds = position?.addOnProduct?.id
@@ -552,14 +684,24 @@ export default function ProductCustomiser() {
     if (!selectedProduct) return;
 
     const selectedVariant = selectedProduct.variants?.[0];
-    updatePositionAddOnProduct(
-      viewIdx,
-      positionIdx,
-      normalizeAddOnProduct({
-        ...selectedProduct,
-        variant: selectedVariant,
-      }),
-    );
+    const pickerProduct = normalizeAddOnProduct({
+      ...selectedProduct,
+      variant: selectedVariant,
+    });
+
+    try {
+      updatePositionAddOnProduct(
+        viewIdx,
+        positionIdx,
+        await resolveAddOnProduct(selectedProduct, selectedVariant),
+      );
+    } catch (error) {
+      console.error("Could not resolve add-on product price", error);
+      updatePositionAddOnProduct(viewIdx, positionIdx, pickerProduct);
+      shopify.toast.show(
+        "Selected product, but could not load its price. Save and check the JSON before publishing.",
+      );
+    }
   };
 
   const clearPositionAddOnProduct = (viewIdx, positionIdx) => {
