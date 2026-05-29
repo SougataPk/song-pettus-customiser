@@ -413,6 +413,33 @@ const fetchAddOnProduct = async (admin, productId, variantId) => {
   });
 };
 
+const hydrateAddOnProduct = async (admin, product) => {
+  const normalizedProduct = normalizeAddOnProduct(product);
+
+  if (!normalizedProduct) return null;
+
+  if (
+    normalizedProduct.variantId &&
+    (!normalizedProduct.price ||
+      !normalizedProduct.variantTitle ||
+      !normalizedProduct.imageUrl)
+  ) {
+    try {
+      return (
+        (await fetchAddOnProduct(
+          admin,
+          normalizedProduct.id,
+          normalizedProduct.variantId,
+        )) || normalizedProduct
+      );
+    } catch (error) {
+      console.error("Could not hydrate add-on product", error);
+    }
+  }
+
+  return normalizedProduct;
+};
+
 export const action = async ({ request, params }) => {
   const { admin } = await authenticate.admin(request);
   const { id } = params;
@@ -438,7 +465,7 @@ export const action = async ({ request, params }) => {
   const settings = JSON.parse(formData.get("settings"));
   const sanitizedSettings = {
     ...settings,
-    views: settings.views.map((view) => {
+    views: await Promise.all(settings.views.map(async (view) => {
       const { positions, ...viewSettings } = view;
       delete viewSettings.addOnProduct;
 
@@ -448,12 +475,17 @@ export const action = async ({ request, params }) => {
         optional: Boolean(view.optional),
         enableCollapsible: Boolean(view.enableCollapsible),
         collapsibleHeading: view.collapsibleHeading || view.name,
-        positions: positions.map((position) => ({
-          ...position,
-          addOnProduct: normalizeAddOnProduct(position.addOnProduct),
-        })),
+        positions: await Promise.all(
+          positions.map(async (position) => ({
+            ...position,
+            addOnProduct: await hydrateAddOnProduct(
+              admin,
+              position.addOnProduct,
+            ),
+          })),
+        ),
       };
-    }),
+    })),
   };
 
   const response = await admin.graphql(
