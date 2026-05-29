@@ -236,105 +236,6 @@ const normalizeSettings = (colors, parsed) => {
   };
 };
 
-export const loader = async ({ request, params }) => {
-  const { admin } = await authenticate.admin(request);
-  const { id } = params;
-
-  let response;
-
-  try {
-    response = await admin.graphql(
-      `#graphql
-    query getProduct($id: ID!) {
-      product(id: $id) {
-        id
-        title
-        options {
-          id
-          name
-          values
-        }
-        variants(first: 100) {
-          edges {
-            node {
-              id
-              title
-              selectedOptions {
-                name
-                value
-              }
-            }
-          }
-        }
-        images(first: 50) {
-          edges {
-            node {
-              id
-              url
-              altText
-            }
-          }
-        }
-        location_settings: metafield(namespace: "custom", key: "location_settings") {
-          jsonValue
-        }
-      }
-    }`,
-      {
-        variables: {
-          id: `gid://shopify/Product/${id}`,
-        },
-        tries: 3,
-      },
-    );
-  } catch (error) {
-    console.error("Shopify Admin API request failed", error);
-    throw new Response(
-      "Could not reach Shopify Admin API. Check your internet connection and Shopify CLI tunnel, then try again.",
-      {
-        status: 503,
-        statusText: "Shopify Admin API unavailable",
-      },
-    );
-  }
-
-  const responseJson = await response.json();
-  const product = responseJson.data.product;
-
-  const colorOption = product.options.find(
-    (opt) =>
-      opt.name.toLowerCase() === "color" || opt.name.toLowerCase() === "colour",
-  );
-  const colors = colorOption ? colorOption.values : ["Default"];
-
-  let initialSettings = normalizeSettings(colors);
-
-  const existingLocationSettings = product.location_settings?.jsonValue;
-  const needsSideOptionDefaults = settingsMissingSideOptionDefaults(
-    existingLocationSettings,
-  );
-
-  if (existingLocationSettings) {
-    try {
-      initialSettings = normalizeSettings(colors, existingLocationSettings);
-    } catch (e) {
-      console.error("Error parsing metafield value", e);
-    }
-  }
-
-  const productImages = product.images.edges.map(({ node }) => ({
-    ...node,
-    altText: node.altText || product.title,
-  }));
-
-  return {
-    product,
-    initialSettings,
-    productImages,
-    needsSideOptionDefaults,
-  };
-};
-
 const fetchAddOnProduct = async (admin, productId, variantId) => {
   if (variantId) {
     const variantResponse = await admin.graphql(
@@ -438,6 +339,136 @@ const hydrateAddOnProduct = async (admin, product) => {
   }
 
   return normalizedProduct;
+};
+
+const settingsMissingAddOnPrices = (settings) =>
+  settings?.views?.some((view) =>
+    view.positions?.some((position) => {
+      const addOnProduct = normalizeAddOnProduct(position.addOnProduct);
+
+      return Boolean(addOnProduct?.variantId && !addOnProduct.price);
+    }),
+  ) || false;
+
+const hydrateSettingsAddOns = async (admin, settings) => ({
+  ...settings,
+  views: await Promise.all(
+    settings.views.map(async (view) => ({
+      ...view,
+      positions: await Promise.all(
+        view.positions.map(async (position) => ({
+          ...position,
+          addOnProduct: await hydrateAddOnProduct(
+            admin,
+            position.addOnProduct,
+          ),
+        })),
+      ),
+    })),
+  ),
+});
+
+export const loader = async ({ request, params }) => {
+  const { admin } = await authenticate.admin(request);
+  const { id } = params;
+
+  let response;
+
+  try {
+    response = await admin.graphql(
+      `#graphql
+    query getProduct($id: ID!) {
+      product(id: $id) {
+        id
+        title
+        options {
+          id
+          name
+          values
+        }
+        variants(first: 100) {
+          edges {
+            node {
+              id
+              title
+              selectedOptions {
+                name
+                value
+              }
+            }
+          }
+        }
+        images(first: 50) {
+          edges {
+            node {
+              id
+              url
+              altText
+            }
+          }
+        }
+        location_settings: metafield(namespace: "custom", key: "location_settings") {
+          jsonValue
+        }
+      }
+    }`,
+      {
+        variables: {
+          id: `gid://shopify/Product/${id}`,
+        },
+        tries: 3,
+      },
+    );
+  } catch (error) {
+    console.error("Shopify Admin API request failed", error);
+    throw new Response(
+      "Could not reach Shopify Admin API. Check your internet connection and Shopify CLI tunnel, then try again.",
+      {
+        status: 503,
+        statusText: "Shopify Admin API unavailable",
+      },
+    );
+  }
+
+  const responseJson = await response.json();
+  const product = responseJson.data.product;
+
+  const colorOption = product.options.find(
+    (opt) =>
+      opt.name.toLowerCase() === "color" || opt.name.toLowerCase() === "colour",
+  );
+  const colors = colorOption ? colorOption.values : ["Default"];
+
+  let initialSettings = normalizeSettings(colors);
+
+  const existingLocationSettings = product.location_settings?.jsonValue;
+  let needsDefaultSave = settingsMissingSideOptionDefaults(
+    existingLocationSettings,
+  );
+
+  if (existingLocationSettings) {
+    try {
+      initialSettings = normalizeSettings(colors, existingLocationSettings);
+      if (settingsMissingAddOnPrices(initialSettings)) {
+        initialSettings = await hydrateSettingsAddOns(admin, initialSettings);
+        needsDefaultSave = true;
+      }
+    } catch (e) {
+      console.error("Error parsing metafield value", e);
+    }
+  }
+
+  const productImages = product.images.edges.map(({ node }) => ({
+    ...node,
+    altText: node.altText || product.title,
+  }));
+
+  return {
+    product,
+    initialSettings,
+    productImages,
+    needsSideOptionDefaults: needsDefaultSave,
+  };
 };
 
 export const action = async ({ request, params }) => {
