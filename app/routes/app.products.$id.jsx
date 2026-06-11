@@ -42,6 +42,38 @@ const getViewId = (name, existingId) => {
   return existingId || createId(sideKey || "side");
 };
 
+const getDefaultViewId = (name) => {
+  const sideKey = createSideKey(name);
+  return DEFAULT_VIEWS.some((viewName) => createSideKey(viewName) === sideKey)
+    ? sideKey
+    : "";
+};
+
+const isTemporaryNewSideId = (id = "") => id.startsWith("new-side-");
+
+const migrateViewImageKeys = (images, oldViewId, newViewId) => {
+  const migratedImages = { ...images };
+  const oldPositionPrefix = `${oldViewId}::position::`;
+  const newPositionPrefix = `${newViewId}::position::`;
+
+  if (oldViewId in migratedImages && !(newViewId in migratedImages)) {
+    migratedImages[newViewId] = migratedImages[oldViewId];
+  }
+  delete migratedImages[oldViewId];
+
+  Object.entries(images || {}).forEach(([key, value]) => {
+    if (!key.startsWith(oldPositionPrefix)) return;
+
+    const migratedKey = key.replace(oldPositionPrefix, newPositionPrefix);
+    if (!(migratedKey in migratedImages)) {
+      migratedImages[migratedKey] = value;
+    }
+    delete migratedImages[key];
+  });
+
+  return migratedImages;
+};
+
 const createPosition = (name = "Print area") => ({
   id: createId("position"),
   name,
@@ -657,12 +689,36 @@ export default function ProductCustomiser() {
   };
 
   const updateViewName = (viewIdx, name) => {
-    setSettings((currentSettings) => ({
-      ...currentSettings,
-      views: currentSettings.views.map((view, index) =>
-        index === viewIdx ? { ...view, name } : view,
-      ),
-    }));
+    setSettings((currentSettings) => {
+      const view = currentSettings.views[viewIdx];
+      const defaultViewId = getDefaultViewId(name);
+      const shouldMigrateViewId =
+        view &&
+        defaultViewId &&
+        isTemporaryNewSideId(view.id) &&
+        !currentSettings.views.some(
+          (currentView, index) =>
+            index !== viewIdx && currentView.id === defaultViewId,
+        );
+      const nextViewId = shouldMigrateViewId ? defaultViewId : view?.id;
+
+      return {
+        ...currentSettings,
+        views: currentSettings.views.map((view, index) =>
+          index === viewIdx ? { ...view, id: nextViewId, name } : view,
+        ),
+        colorImages: shouldMigrateViewId
+          ? currentSettings.colorImages.map((colorImage) => ({
+              ...colorImage,
+              images: migrateViewImageKeys(
+                colorImage.images,
+                view.id,
+                nextViewId,
+              ),
+            }))
+          : currentSettings.colorImages,
+      };
+    });
   };
 
   const updateViewField = (viewIdx, field, value) => {
