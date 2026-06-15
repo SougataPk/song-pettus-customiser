@@ -298,6 +298,10 @@ const fetchAddOnProduct = async (admin, productId, variantId) => {
       },
     );
     const variantJson = await variantResponse.json();
+    if (variantJson.errors?.length) {
+      throw new Error(variantJson.errors.map((error) => error.message).join(", "));
+    }
+
     const variant = variantJson.data?.node;
 
     if (variant?.product) {
@@ -338,6 +342,10 @@ const fetchAddOnProduct = async (admin, productId, variantId) => {
     },
   );
   const productJson = await productResponse.json();
+  if (productJson.errors?.length) {
+    throw new Error(productJson.errors.map((error) => error.message).join(", "));
+  }
+
   const product = productJson.data?.product;
 
   return normalizeAddOnProduct({
@@ -400,9 +408,63 @@ const hydrateSettingsAddOns = async (admin, settings) => ({
   ),
 });
 
+const fetchProductImages = async (admin, productId) => {
+  const images = [];
+  let hasNextPage = true;
+  let after = null;
+
+  while (hasNextPage) {
+    const response = await admin.graphql(
+      `#graphql
+    query getProductImages($id: ID!, $after: String) {
+      product(id: $id) {
+        title
+        images(first: 250, after: $after) {
+          edges {
+            cursor
+            node {
+              id
+              url
+              altText
+            }
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    }`,
+      {
+        variables: {
+          id: productId,
+          after,
+        },
+        tries: 3,
+      },
+    );
+
+    const responseJson = await response.json();
+    const product = responseJson.data.product;
+
+    images.push(
+      ...product.images.edges.map(({ node }) => ({
+        ...node,
+        altText: node.altText || product.title,
+      })),
+    );
+
+    hasNextPage = product.images.pageInfo.hasNextPage;
+    after = product.images.pageInfo.endCursor;
+  }
+
+  return images;
+};
+
 export const loader = async ({ request, params }) => {
   const { admin } = await authenticate.admin(request);
   const { id } = params;
+  const productId = `gid://shopify/Product/${id}`;
 
   let response;
 
@@ -430,15 +492,6 @@ export const loader = async ({ request, params }) => {
             }
           }
         }
-        images(first: 50) {
-          edges {
-            node {
-              id
-              url
-              altText
-            }
-          }
-        }
         location_settings: metafield(namespace: "custom", key: "location_settings") {
           jsonValue
         }
@@ -446,7 +499,7 @@ export const loader = async ({ request, params }) => {
     }`,
       {
         variables: {
-          id: `gid://shopify/Product/${id}`,
+          id: productId,
         },
         tries: 3,
       },
@@ -490,10 +543,7 @@ export const loader = async ({ request, params }) => {
     }
   }
 
-  const productImages = product.images.edges.map(({ node }) => ({
-    ...node,
-    altText: node.altText || product.title,
-  }));
+  const productImages = await fetchProductImages(admin, productId);
 
   return {
     product,
@@ -509,11 +559,22 @@ export const action = async ({ request, params }) => {
   const formData = await request.formData();
 
   if (formData.get("intent") === "resolveAddOnProduct") {
-    const addOnProduct = await fetchAddOnProduct(
-      admin,
-      formData.get("productId"),
-      formData.get("variantId"),
-    );
+    let addOnProduct;
+
+    try {
+      addOnProduct = await fetchAddOnProduct(
+        admin,
+        formData.get("productId"),
+        formData.get("variantId"),
+      );
+    } catch (error) {
+      console.error("Could not resolve selected add-on product", error);
+
+      return Response.json(
+        { error: error.message || "Could not load selected add-on product" },
+        { status: 500 },
+      );
+    }
 
     if (!addOnProduct) {
       return Response.json(
@@ -766,7 +827,7 @@ export default function ProductCustomiser() {
       formData.append("variantId", selectedVariant.id);
     }
 
-    const response = await fetch(".", {
+    const response = await fetch(window.location.href, {
       method: "POST",
       body: formData,
     });
