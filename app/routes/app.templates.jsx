@@ -52,6 +52,7 @@ const normalizeAddOnProduct = (product) => {
 const createPosition = (name = "Print area", canvas = DEFAULT_CANVAS) => ({
   id: createId("position"),
   name,
+  previewImage: "",
   addOnProduct: null,
   canvas: { ...DEFAULT_CANVAS, ...canvas },
 });
@@ -78,6 +79,7 @@ const normalizePosition = (position, index = 0) => ({
     DEFAULT_POSITION_NAMES[index] ||
     `Print area ${index + 1}`,
   addOnProduct: normalizeAddOnProduct(position?.addOnProduct),
+  previewImage: position?.previewImage || "",
   canvas: { ...DEFAULT_CANVAS, ...(position?.canvas || {}) },
 });
 
@@ -301,6 +303,7 @@ const sanitizeTemplates = async (admin, templates) =>
             positions: await Promise.all(
               view.positions.map(async (position) => ({
                 ...position,
+                previewImage: position.previewImage || "",
                 addOnProduct: await hydrateAddOnProduct(
                   admin,
                   position.addOnProduct,
@@ -545,7 +548,14 @@ export default function ProductTemplates() {
     }));
   };
 
-  const uploadPreviewImage = async (event, viewIdx) => {
+  const updatePositionPreviewImage = (viewIdx, positionIdx, previewImage) => {
+    updatePosition(viewIdx, positionIdx, (position) => ({
+      ...position,
+      previewImage,
+    }));
+  };
+
+  const uploadPreviewImage = async (event, onUpload) => {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
 
@@ -568,7 +578,7 @@ export default function ProductTemplates() {
         throw new Error(result.error || "Image upload failed");
       }
 
-      updateViewPreviewImage(viewIdx, result.imageUrl);
+      onUpload(result.imageUrl);
       shopify.toast.show("Preview image uploaded");
     } catch (error) {
       console.error("Template preview upload failed", error);
@@ -651,6 +661,47 @@ export default function ProductTemplates() {
     </div>
   );
 
+  const renderPreviewImageActions = ({
+    hasImage,
+    onUpload,
+    onRemove,
+    addLabel = "Add File",
+  }) => (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "8px",
+        justifyContent: "flex-end",
+      }}
+    >
+      <s-button
+        disabled={uploadingPreviewImage}
+        {...(uploadingPreviewImage ? { loading: true } : {})}
+      >
+        <label
+          style={{
+            cursor: uploadingPreviewImage ? "default" : "pointer",
+          }}
+        >
+          {hasImage ? "Change File" : addLabel}
+          <input
+            type="file"
+            accept="image/*"
+            disabled={uploadingPreviewImage}
+            onChange={(event) => uploadPreviewImage(event, onUpload)}
+            style={{ display: "none" }}
+          />
+        </label>
+      </s-button>
+      {hasImage && (
+        <s-button variant="tertiary" tone="critical" onClick={onRemove}>
+          Remove
+        </s-button>
+      )}
+    </div>
+  );
+
   const renderPreviewImageArea = (view, viewIdx) => (
     <div
       style={{
@@ -679,43 +730,11 @@ export default function ProductTemplates() {
             Reference only for setting template positions.
           </s-text>
         </s-stack>
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "8px",
-            justifyContent: "flex-end",
-          }}
-        >
-          <s-button
-            disabled={uploadingPreviewImage}
-            {...(uploadingPreviewImage ? { loading: true } : {})}
-          >
-            <label
-              style={{
-                cursor: uploadingPreviewImage ? "default" : "pointer",
-              }}
-            >
-              {view.previewImage ? "Change File" : "Add File"}
-              <input
-                type="file"
-                accept="image/*"
-                disabled={uploadingPreviewImage}
-                onChange={(event) => uploadPreviewImage(event, viewIdx)}
-                style={{ display: "none" }}
-              />
-            </label>
-          </s-button>
-          {view.previewImage && (
-            <s-button
-              variant="tertiary"
-              tone="critical"
-              onClick={() => updateViewPreviewImage(viewIdx, "")}
-            >
-              Remove
-            </s-button>
-          )}
-        </div>
+        {renderPreviewImageActions({
+          hasImage: Boolean(view.previewImage),
+          onUpload: (imageUrl) => updateViewPreviewImage(viewIdx, imageUrl),
+          onRemove: () => updateViewPreviewImage(viewIdx, ""),
+        })}
       </div>
 
       <div
@@ -734,6 +753,41 @@ export default function ProductTemplates() {
             )
           : renderEmptyPreviewState()}
       </div>
+    </div>
+  );
+
+  const renderPositionPreviewImageArea = (view, viewIdx, position, positionIdx) => (
+    <div
+      style={{
+        border: "1px solid #e3e3e3",
+        borderRadius: "8px",
+        backgroundColor: "#fafafa",
+        padding: "12px",
+      }}
+    >
+      <s-stack direction="block" gap="small">
+        <s-stack direction="inline" alignItems="center" justifyContent="space-between" gap="base">
+          <s-stack direction="block" gap="none">
+            <s-text type="strong">{position.name} position image</s-text>
+            <s-text color="subdued">
+              Optional reference image for this print area.
+            </s-text>
+          </s-stack>
+          {renderPreviewImageActions({
+            hasImage: Boolean(position.previewImage),
+            onUpload: (imageUrl) =>
+              updatePositionPreviewImage(viewIdx, positionIdx, imageUrl),
+            onRemove: () => updatePositionPreviewImage(viewIdx, positionIdx, ""),
+          })}
+        </s-stack>
+
+        {position.previewImage &&
+          renderImagePreview(
+            position.previewImage,
+            `${activeTemplate.name} ${view.name} ${position.name} preview`,
+            [position],
+          )}
+      </s-stack>
     </div>
   );
 
@@ -1233,6 +1287,13 @@ export default function ProductTemplates() {
                                       ),
                                     )}
                                   </div>
+
+                                  {renderPositionPreviewImageArea(
+                                    view,
+                                    viewIdx,
+                                    position,
+                                    positionIdx,
+                                  )}
 
                                   <div
                                     style={{
