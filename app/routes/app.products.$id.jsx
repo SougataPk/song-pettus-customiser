@@ -2141,65 +2141,75 @@ export default function ProductCustomiser() {
       <s-stack direction="block" gap="base">
         <s-section>
           <s-stack direction="block" gap="base">
-            <s-stack direction="block" gap="none">
-              <s-heading>Product sides and print positions</s-heading>
-              <s-text color="subdued">
-                Configure each customisation block, its selectable print areas,
-                and the add-on product attached to each area.
-              </s-text>
-            </s-stack>
-            {productTemplates.length > 0 && (
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  alignItems: "end",
-                  gap: "10px",
-                  flexWrap: "wrap",
-                }}
-              >
-                <label
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "end",
+                gap: "24px",
+                flexWrap: "wrap",
+              }}
+            >
+              <s-stack direction="block" gap="none">
+                <s-heading>Product sides and print positions</s-heading>
+                <s-text color="subdued">
+                  Configure each customisation block, its selectable print
+                  areas, and the add-on product attached to each area.
+                </s-text>
+              </s-stack>
+              {productTemplates.length > 0 && (
+                <div
                   style={{
                     display: "flex",
-                    flexDirection: "column",
-                    gap: "4px",
-                    minWidth: "240px",
+                    alignItems: "end",
+                    gap: "10px",
+                    flexWrap: "wrap",
+                    marginLeft: "auto",
                   }}
                 >
-                  <span style={{ fontSize: "13px", fontWeight: 600 }}>
-                    Product template
-                  </span>
-                  <select
-                    value={selectedTemplateId}
-                    onChange={(event) =>
-                      setSelectedTemplateId(event.currentTarget.value)
-                    }
+                  <label
                     style={{
-                      minHeight: "34px",
-                      border: "1px solid #babfc3",
-                      borderRadius: "6px",
-                      backgroundColor: "#fff",
-                      color: "#202223",
-                      padding: "6px 10px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                      minWidth: "260px",
                     }}
                   >
-                    <option value="">Choose template</option>
-                    {productTemplates.map((template) => (
-                      <option key={template.id} value={template.id}>
-                        {template.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <s-button
-                  variant="primary"
-                  disabled={!selectedTemplateId}
-                  onClick={applySelectedTemplate}
-                >
-                  Apply Template
-                </s-button>
-              </div>
-            )}
+                    <span style={{ fontSize: "13px", fontWeight: 600 }}>
+                      Product template
+                    </span>
+                    <select
+                      value={selectedTemplateId}
+                      onChange={(event) =>
+                        setSelectedTemplateId(event.currentTarget.value)
+                      }
+                      style={{
+                        minHeight: "34px",
+                        border: "1px solid #babfc3",
+                        borderRadius: "6px",
+                        backgroundColor: "#fff",
+                        color: "#202223",
+                        padding: "6px 10px",
+                      }}
+                    >
+                      <option value="">Choose template</option>
+                      {productTemplates.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <s-button
+                    variant="primary"
+                    disabled={!selectedTemplateId}
+                    onClick={applySelectedTemplate}
+                  >
+                    Apply Template
+                  </s-button>
+                </div>
+              )}
+            </div>
             {settings.views.map((view, viewIdx) => {
               const isCollapsed = collapsedViewIds.has(view.id);
 
