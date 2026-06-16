@@ -2143,39 +2143,45 @@ export default function ProductCustomiser() {
           <s-stack direction="block" gap="base">
             <div
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "end",
-                gap: "24px",
-                flexWrap: "wrap",
+                display: "grid",
+                gridTemplateColumns: "minmax(280px, 1fr) auto",
+                alignItems: "start",
+                gap: "20px",
               }}
             >
-              <s-stack direction="block" gap="none">
-                <s-heading>Product sides and print positions</s-heading>
-                <s-text color="subdued">
-                  Configure each customisation block, its selectable print
-                  areas, and the add-on product attached to each area.
-                </s-text>
-              </s-stack>
+              <div style={{ minWidth: 0 }}>
+                <s-stack direction="block" gap="none">
+                  <s-heading>Product sides and print positions</s-heading>
+                  <s-text color="subdued">
+                    Configure each customisation block, its selectable print
+                    areas, and the add-on product attached to each area.
+                  </s-text>
+                </s-stack>
+              </div>
               {productTemplates.length > 0 && (
                 <div
                   style={{
                     display: "flex",
-                    alignItems: "end",
-                    gap: "10px",
+                    alignItems: "center",
+                    gap: "8px",
                     flexWrap: "wrap",
-                    marginLeft: "auto",
+                    justifyContent: "flex-end",
                   }}
                 >
                   <label
                     style={{
                       display: "flex",
-                      flexDirection: "column",
-                      gap: "4px",
-                      minWidth: "260px",
+                      alignItems: "center",
+                      gap: "8px",
                     }}
                   >
-                    <span style={{ fontSize: "13px", fontWeight: 600 }}>
+                    <span
+                      style={{
+                        fontSize: "13px",
+                        fontWeight: 600,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       Product template
                     </span>
                     <select
@@ -2190,6 +2196,7 @@ export default function ProductCustomiser() {
                         backgroundColor: "#fff",
                         color: "#202223",
                         padding: "6px 10px",
+                        width: "220px",
                       }}
                     >
                       <option value="">Choose template</option>
