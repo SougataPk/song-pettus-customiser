@@ -1018,7 +1018,6 @@ export default function ProductCustomiser() {
     () => new Set(initialSettings.views.map((view) => view.id)),
   );
   const [activePositionEditor, setActivePositionEditor] = useState(null);
-  const [activePicker, setActivePicker] = useState(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState(() =>
     getSelectedTemplateId(initialSettings, productTemplates),
   );
@@ -1085,7 +1084,6 @@ export default function ProductCustomiser() {
     setSelectedTemplateId(template.id);
     setCollapsedViewIds(new Set(nextSettings.views.map((view) => view.id)));
     setActivePositionEditor(null);
-    setActivePicker(null);
     shopify.toast.show(`${template.name} template applied`);
   };
 
@@ -1420,14 +1418,45 @@ export default function ProductCustomiser() {
     }));
   };
 
-  const selectImage = (imageUrl) => {
-    if (!activePicker) return;
+  const openImageLibraryPicker = async (targetPicker, selectedImage = "") => {
+    if (!targetPicker) return;
 
-    assignImage(activePicker.colorIdx, activePicker.imageKey, imageUrl);
-    setActivePicker(null);
+    if (!productImages.length) {
+      shopify.toast.show("No product images are available.");
+      return;
+    }
+
+    if (!shopify.picker) {
+      shopify.toast.show("The Shopify image picker is not available.");
+      return;
+    }
+
+    const result = await shopify.picker({
+      heading: "Select image",
+      items: productImages.map((image, index) => ({
+        id: image.id,
+        heading: image.altText || `Product image ${index + 1}`,
+        thumbnail: { url: image.url },
+        selected: image.url === selectedImage,
+      })),
+      multiple: false,
+    });
+    const selectedId =
+      result?.selected?.[0]?.id || result?.selected?.[0] || result?.id || "";
+    const selectedProductImage = productImages.find(
+      (image) => image.id === selectedId,
+    );
+
+    if (selectedProductImage) {
+      assignImage(
+        targetPicker.colorIdx,
+        targetPicker.imageKey,
+        selectedProductImage.url,
+      );
+    }
   };
 
-  const uploadImageForTarget = async (event, targetPicker = activePicker) => {
+  const uploadImageForTarget = async (event, targetPicker) => {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
 
@@ -1451,7 +1480,6 @@ export default function ProductCustomiser() {
       }
 
       assignImage(targetPicker.colorIdx, targetPicker.imageKey, result.imageUrl);
-      setActivePicker(null);
       shopify.toast.show("Image uploaded successfully");
     } catch (error) {
       console.error("Cloudinary upload failed", error);
@@ -1460,8 +1488,6 @@ export default function ProductCustomiser() {
       setUploadingImage(false);
     }
   };
-
-  const uploadImage = (event) => uploadImageForTarget(event);
 
   const getImageForView = (colorIdx, viewId) =>
     settings.colorImages[colorIdx]?.images?.[viewId] || "";
@@ -1615,7 +1641,7 @@ export default function ProductCustomiser() {
     colorIdx,
     imageKey,
     hasImage,
-    onPick,
+    selectedImage = "",
     onClear,
     includeEdit,
     onEdit,
@@ -1629,7 +1655,12 @@ export default function ProductCustomiser() {
       }}
     >
       {renderUploadButton(colorIdx, imageKey, hasImage)}
-      <s-button variant="tertiary" onClick={onPick}>
+      <s-button
+        variant="tertiary"
+        onClick={() =>
+          openImageLibraryPicker({ colorIdx, imageKey }, selectedImage)
+        }
+      >
         Library
       </s-button>
       {includeEdit && (
@@ -1683,9 +1714,6 @@ export default function ProductCustomiser() {
           {settings.colorImages.map((colorImage, colorIdx) => {
             const viewImageKey = view.id;
             const selectedImage = getImageForView(colorIdx, view.id);
-            const pickerIsActive =
-              activePicker?.colorIdx === colorIdx &&
-              activePicker?.imageKey === viewImageKey;
 
             return (
               <div
@@ -1718,11 +1746,7 @@ export default function ProductCustomiser() {
                     colorIdx,
                     imageKey: viewImageKey,
                     hasImage: Boolean(selectedImage),
-                    onPick: () =>
-                      setActivePicker({
-                        colorIdx,
-                        imageKey: viewImageKey,
-                      }),
+                    selectedImage,
                     onClear: () => clearImage(colorIdx, view.id),
                   })}
                 </div>
@@ -1746,8 +1770,6 @@ export default function ProductCustomiser() {
                         )
                     : renderEmptyImageState(`Add a ${view.name} image`)}
 
-                  {pickerIsActive && renderImagePicker(selectedImage)}
-
                   <div
                     style={{
                       display: "flex",
@@ -1770,9 +1792,6 @@ export default function ProductCustomiser() {
                         view.id,
                         position.id,
                       );
-                      const positionPickerIsActive =
-                        activePicker?.colorIdx === colorIdx &&
-                        activePicker?.imageKey === positionImageKey;
 
                       return (
                         <div
@@ -1839,12 +1858,8 @@ export default function ProductCustomiser() {
                                 colorIdx,
                                 imageKey: positionImageKey,
                                 hasImage: hasOverride,
+                                selectedImage: positionImage,
                                 includeEdit: true,
-                                onPick: () =>
-                                  setActivePicker({
-                                    colorIdx,
-                                    imageKey: positionImageKey,
-                                  }),
                                 onClear: () =>
                                   clearImage(colorIdx, positionImageKey),
                                 onEdit: () =>
@@ -1855,12 +1870,6 @@ export default function ProductCustomiser() {
                               })}
                             </div>
                           </div>
-
-                          {positionPickerIsActive && (
-                            <div style={{ marginTop: "10px" }}>
-                              {renderImagePicker(positionImage)}
-                            </div>
-                          )}
                         </div>
                       );
                     })}
@@ -2009,9 +2018,6 @@ export default function ProductCustomiser() {
                   view.id,
                   position.id,
                 );
-                const pickerIsActive =
-                  activePicker?.colorIdx === colorIdx &&
-                  activePicker?.imageKey === positionImageKey;
 
                 return (
                   <div
@@ -2054,10 +2060,10 @@ export default function ProductCustomiser() {
                         )}
                         <s-button
                           onClick={() =>
-                            setActivePicker({
-                              colorIdx,
-                              imageKey: positionImageKey,
-                            })
+                            openImageLibraryPicker(
+                              { colorIdx, imageKey: positionImageKey },
+                              previewImage,
+                            )
                           }
                         >
                           {hasOverride ? "Change Image" : "Pick Image"}
@@ -2096,7 +2102,6 @@ export default function ProductCustomiser() {
                       </s-box>
                     )}
 
-                    {pickerIsActive && renderImagePicker(previewImage)}
                   </div>
                 );
               })}
@@ -2106,79 +2111,6 @@ export default function ProductCustomiser() {
       </div>
     );
   };
-
-  const renderImagePicker = (selectedImage) => (
-    <s-box padding="base" background="subdued" border="base" borderRadius="base">
-      <s-stack direction="block" gap="base">
-        <s-stack
-          direction="inline"
-          justifyContent="space-between"
-          alignItems="center"
-        >
-          <s-text type="strong">Select Image</s-text>
-          <s-button-group>
-            <s-button
-              disabled={uploadingImage}
-              {...(uploadingImage ? { loading: true } : {})}
-            >
-              <label
-                style={{
-                  cursor: uploadingImage ? "default" : "pointer",
-                }}
-              >
-                Upload image
-                <input
-                  type="file"
-                  accept="image/*"
-                  disabled={uploadingImage}
-                  onChange={uploadImage}
-                  style={{ display: "none" }}
-                />
-              </label>
-            </s-button>
-            <s-button variant="tertiary" onClick={() => setActivePicker(null)}>
-              Close
-            </s-button>
-          </s-button-group>
-        </s-stack>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))",
-            gap: "8px",
-          }}
-        >
-          {productImages.map((img) => (
-            <button
-              key={img.id}
-              type="button"
-              onClick={() => selectImage(img.url)}
-              style={{
-                cursor: "pointer",
-                border:
-                  selectedImage === img.url
-                    ? "2px solid #008060"
-                    : "1px solid #ddd",
-                borderRadius: "4px",
-                padding: "2px",
-                background: "transparent",
-                lineHeight: 0,
-              }}
-            >
-              <img
-                src={img.url}
-                alt={img.altText}
-                style={{
-                  width: "100%",
-                  display: "block",
-                }}
-              />
-            </button>
-          ))}
-        </div>
-      </s-stack>
-    </s-box>
-  );
 
   return (
     <s-page heading={product.title}>
