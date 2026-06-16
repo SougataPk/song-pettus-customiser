@@ -91,6 +91,27 @@ const createView = (name) => ({
   positions: DEFAULT_POSITION_NAMES.map(createPosition),
 });
 
+const createTemplatePosition = (name = "Print area", canvas = DEFAULT_CANVAS) => ({
+  id: createId("position"),
+  name,
+  addOnProduct: null,
+  canvas: { ...DEFAULT_CANVAS, ...canvas },
+});
+
+const createTemplateView = (name, positions = DEFAULT_POSITION_NAMES) => ({
+  id: getViewId(name),
+  name,
+  allowMultipleSelections: false,
+  optional: false,
+  enableCollapsible: false,
+  collapsibleHeading: name,
+  positions: positions.map((position) =>
+    typeof position === "string"
+      ? createTemplatePosition(position)
+      : createTemplatePosition(position.name, position.canvas),
+  ),
+});
+
 const createColorImagesForViews = (colors, views) =>
   colors.map((color) => createColorImages(color, views));
 
@@ -176,10 +197,117 @@ const normalizeViews = (existingViews) => {
   return sourceViews.map((view) => normalizeView(view, "View"));
 };
 
-const normalizeTemplates = (value) => {
-  if (!Array.isArray(value)) return [];
+const createDefaultTemplates = () => [
+  {
+    id: "template-t-shirt",
+    name: "T-Shirt",
+    settings: {
+      views: [
+        createTemplateView("Front", [
+          {
+            name: "Left Chest",
+            canvas: { top: 18, left: 52, width: 20, height: 20 },
+          },
+          {
+            name: "Right Chest",
+            canvas: { top: 18, left: 28, width: 20, height: 20 },
+          },
+        ]),
+        createTemplateView("Back", [
+          {
+            name: "Upper Back",
+            canvas: { top: 16, left: 38, width: 24, height: 18 },
+          },
+          {
+            name: "Full Back",
+            canvas: { top: 28, left: 30, width: 40, height: 44 },
+          },
+        ]),
+        createTemplateView("Sleeve", [
+          {
+            name: "Sleeve Print",
+            canvas: { top: 30, left: 34, width: 32, height: 24 },
+          },
+        ]),
+      ],
+    },
+  },
+  {
+    id: "template-trouser",
+    name: "Trouser",
+    settings: {
+      views: [
+        createTemplateView("Front", [
+          {
+            name: "Left Leg",
+            canvas: { top: 28, left: 54, width: 18, height: 22 },
+          },
+          {
+            name: "Right Leg",
+            canvas: { top: 28, left: 28, width: 18, height: 22 },
+          },
+        ]),
+        createTemplateView("Back", [
+          {
+            name: "Back Pocket",
+            canvas: { top: 18, left: 38, width: 24, height: 18 },
+          },
+        ]),
+      ],
+    },
+  },
+  {
+    id: "template-cap-hat",
+    name: "Cap/Hat",
+    settings: {
+      views: [
+        createTemplateView("Front", [
+          {
+            name: "Front Panel",
+            canvas: { top: 34, left: 34, width: 32, height: 22 },
+          },
+        ]),
+        createTemplateView("Back", [
+          {
+            name: "Back Strap",
+            canvas: { top: 42, left: 36, width: 28, height: 14 },
+          },
+        ]),
+        createTemplateView("Side", [
+          {
+            name: "Side Panel",
+            canvas: { top: 34, left: 38, width: 24, height: 20 },
+          },
+        ]),
+      ],
+    },
+  },
+  {
+    id: "template-accessories",
+    name: "Accessories",
+    settings: {
+      views: [
+        createTemplateView("Front", [
+          {
+            name: "Primary Print",
+            canvas: { top: 30, left: 30, width: 40, height: 32 },
+          },
+        ]),
+        createTemplateView("Back", [
+          {
+            name: "Secondary Print",
+            canvas: { top: 34, left: 34, width: 32, height: 24 },
+          },
+        ]),
+      ],
+    },
+  },
+];
 
-  return value
+const normalizeTemplates = (value) => {
+  const templates = Array.isArray(value) ? value : [];
+
+  const normalizedTemplates = templates
     .map((template, index) => ({
       id: template?.id || createId(`template-${index}`),
       name: template?.name || `Template ${index + 1}`,
@@ -188,6 +316,8 @@ const normalizeTemplates = (value) => {
       },
     }))
     .filter((template) => template.settings.views.length > 0);
+
+  return normalizedTemplates.length ? normalizedTemplates : createDefaultTemplates();
 };
 
 const cloneTemplateSettings = (template, colors) => {
