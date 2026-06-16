@@ -91,6 +91,9 @@ const createView = (name) => ({
   positions: DEFAULT_POSITION_NAMES.map(createPosition),
 });
 
+const createColorImagesForViews = (colors, views) =>
+  colors.map((color) => createColorImages(color, views));
+
 const normalizePosition = (
   position,
   index = 0,
@@ -173,6 +176,116 @@ const normalizeViews = (existingViews) => {
   return sourceViews.map((view) => normalizeView(view, "View"));
 };
 
+const normalizeTemplates = (value) => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((template, index) => ({
+      id: template?.id || createId(`template-${index}`),
+      name: template?.name || `Template ${index + 1}`,
+      settings: {
+        views: normalizeViews(template?.settings?.views),
+      },
+    }))
+    .filter((template) => template.settings.views.length > 0);
+};
+
+const cloneTemplateSettings = (template, colors) => {
+  const views = normalizeViews(template?.settings?.views).map((view) => ({
+    ...view,
+    id: getViewId(view.name, view.id),
+    positions: view.positions.map((position) => ({
+      ...position,
+      id: position.id || createId("position"),
+      canvas: { ...DEFAULT_CANVAS, ...(position.canvas || {}) },
+      addOnProduct: normalizeAddOnProduct(position.addOnProduct),
+    })),
+  }));
+
+  return {
+    templateId: template?.id || "",
+    templateName: template?.name || "",
+    productOverrides: { positions: {} },
+    views,
+    colorImages: createColorImagesForViews(colors, views),
+  };
+};
+
+const getSelectedTemplateId = (settings, templates) =>
+  templates.some((template) => template.id === settings?.templateId)
+    ? settings.templateId
+    : "";
+
+const getPositionOverrideKey = (viewId, positionId) =>
+  `${viewId}::${positionId}`;
+
+const normalizeProductOverrides = (overrides) => ({
+  positions:
+    overrides?.positions && typeof overrides.positions === "object"
+      ? overrides.positions
+      : {},
+});
+
+const applyProductOverrides = (settings, overrides) => {
+  const productOverrides = normalizeProductOverrides(overrides);
+
+  return {
+    ...settings,
+    productOverrides,
+    views: settings.views.map((view) => ({
+      ...view,
+      positions: view.positions.map((position) => {
+        const override =
+          productOverrides.positions[getPositionOverrideKey(view.id, position.id)];
+
+        if (!override) return position;
+
+        return {
+          ...position,
+          ...(override.name ? { name: override.name } : {}),
+          ...(Object.prototype.hasOwnProperty.call(override, "addOnProduct")
+            ? { addOnProduct: normalizeAddOnProduct(override.addOnProduct) }
+            : {}),
+          canvas: {
+            ...position.canvas,
+            ...(override.canvas || {}),
+          },
+        };
+      }),
+    })),
+  };
+};
+
+const mergePositionOverride = (settings, viewId, positionId, override) => {
+  if (!settings.templateId || !viewId || !positionId) return settings;
+
+  const productOverrides = normalizeProductOverrides(settings.productOverrides);
+  const overrideKey = getPositionOverrideKey(viewId, positionId);
+  const existingOverride = productOverrides.positions[overrideKey] || {};
+
+  return {
+    ...settings,
+    productOverrides: {
+      ...productOverrides,
+      positions: {
+        ...productOverrides.positions,
+        [overrideKey]: {
+          ...existingOverride,
+          ...override,
+          ...(override.canvas
+            ? {
+                canvas: {
+                  ...(existingOverride.canvas || {}),
+                  ...override.canvas,
+                },
+              }
+            : {}),
+        },
+      },
+    },
+  };
+};
+
 const viewMissingSideOptionDefaults = (view) =>
   SIDE_OPTION_FIELDS.some(
     (field) => !Object.prototype.hasOwnProperty.call(view || {}, field),
@@ -236,7 +349,13 @@ const normalizeSettings = (colors, parsed) => {
       return normalizeColorImages(color, views, existing);
     });
 
-    return { views, colorImages };
+    return {
+      templateId: parsed.templateId || "",
+      templateName: parsed.templateName || "",
+      productOverrides: normalizeProductOverrides(parsed.productOverrides),
+      views,
+      colorImages,
+    };
   }
 
   if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].views) {
@@ -258,11 +377,20 @@ const normalizeSettings = (colors, parsed) => {
       };
     });
 
-    return { views, colorImages };
+    return {
+      templateId: "",
+      templateName: "",
+      productOverrides: { positions: {} },
+      views,
+      colorImages,
+    };
   }
 
   const views = [];
   return {
+    templateId: "",
+    templateName: "",
+    productOverrides: { positions: {} },
     views,
     colorImages: colors.map((color) => createColorImages(color, views)),
   };
@@ -472,6 +600,11 @@ export const loader = async ({ request, params }) => {
     response = await admin.graphql(
       `#graphql
     query getProduct($id: ID!) {
+      currentAppInstallation {
+        productTemplates: metafield(namespace: "custom", key: "product_templates") {
+          jsonValue
+        }
+      }
       product(id: $id) {
         id
         title
@@ -517,6 +650,9 @@ export const loader = async ({ request, params }) => {
 
   const responseJson = await response.json();
   const product = responseJson.data.product;
+  const productTemplates = normalizeTemplates(
+    responseJson.data.currentAppInstallation.productTemplates?.jsonValue,
+  );
 
   const colorOption = product.options.find(
     (opt) =>
@@ -534,6 +670,30 @@ export const loader = async ({ request, params }) => {
   if (existingLocationSettings) {
     try {
       initialSettings = normalizeSettings(colors, existingLocationSettings);
+      const appliedTemplate = productTemplates.find(
+        (template) => template.id === initialSettings.templateId,
+      );
+
+      if (appliedTemplate) {
+        const templateSettings = cloneTemplateSettings(appliedTemplate, colors);
+        const overriddenSettings = applyProductOverrides(
+          templateSettings,
+          initialSettings.productOverrides,
+        );
+        initialSettings = {
+          ...overriddenSettings,
+          colorImages: colors.map((color) => {
+            const existing = initialSettings.colorImages?.find(
+              (item) => item.color === color,
+            );
+            return normalizeColorImages(
+              color,
+              overriddenSettings.views,
+              existing,
+            );
+          }),
+        };
+      }
       if (settingsMissingAddOnPrices(initialSettings)) {
         initialSettings = await hydrateSettingsAddOns(admin, initialSettings);
         needsDefaultSave = true;
@@ -549,6 +709,7 @@ export const loader = async ({ request, params }) => {
     product,
     initialSettings,
     productImages,
+    productTemplates,
     needsSideOptionDefaults: needsDefaultSave,
   };
 };
@@ -648,8 +809,13 @@ export const action = async ({ request, params }) => {
 };
 
 export default function ProductCustomiser() {
-  const { product, initialSettings, productImages, needsSideOptionDefaults } =
-    useLoaderData();
+  const {
+    product,
+    initialSettings,
+    productImages,
+    productTemplates,
+    needsSideOptionDefaults,
+  } = useLoaderData();
   const fetcher = useFetcher();
   const navigate = useNavigate();
   const shopify = useAppBridge();
@@ -664,9 +830,20 @@ export default function ProductCustomiser() {
   );
   const [activePositionEditor, setActivePositionEditor] = useState(null);
   const [activePicker, setActivePicker] = useState(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(() =>
+    getSelectedTemplateId(initialSettings, productTemplates),
+  );
   const [uploadingImage, setUploadingImage] = useState(false);
   const pendingSaveSettings = useRef(null);
 
+  const productColors =
+    product.options
+      .find(
+        (option) =>
+          option.name.toLowerCase() === "color" ||
+          option.name.toLowerCase() === "colour",
+      )
+      ?.values || ["Default"];
   const isSaving = fetcher.state !== "idle";
   const hasUnsavedChanges =
     needsDefaultSave ||
@@ -697,11 +874,28 @@ export default function ProductCustomiser() {
 
   const handleCancel = () => {
     setSettings(savedSettings);
+    setSelectedTemplateId(getSelectedTemplateId(savedSettings, productTemplates));
+  };
+
+  const applySelectedTemplate = () => {
+    const template = productTemplates.find(
+      (template) => template.id === selectedTemplateId,
+    );
+    if (!template) return;
+
+    const nextSettings = cloneTemplateSettings(template, productColors);
+    setSettings(nextSettings);
+    setSelectedTemplateId(template.id);
+    setCollapsedViewIds(new Set(nextSettings.views.map((view) => view.id)));
+    setActivePositionEditor(null);
+    setActivePicker(null);
+    shopify.toast.show(`${template.name} template applied`);
   };
 
   const addView = () => {
     const view = createView("New side");
     setSettings((currentSettings) => ({
+      ...currentSettings,
       views: [...currentSettings.views, view],
       colorImages: currentSettings.colorImages.map((colorImage) => ({
         ...colorImage,
@@ -718,6 +912,7 @@ export default function ProductCustomiser() {
   const removeView = (viewIdx) => {
     const viewId = settings.views[viewIdx].id;
     setSettings((currentSettings) => ({
+      ...currentSettings,
       views: currentSettings.views.filter((_, index) => index !== viewIdx),
       colorImages: currentSettings.colorImages.map((colorImage) => {
         const images = { ...colorImage.images };
@@ -804,7 +999,12 @@ export default function ProductCustomiser() {
 
   const updatePositionAddOnProduct = (viewIdx, positionIdx, addOnProduct) => {
     setSettings((currentSettings) => ({
-      ...currentSettings,
+      ...mergePositionOverride(
+        currentSettings,
+        currentSettings.views[viewIdx]?.id,
+        currentSettings.views[viewIdx]?.positions?.[positionIdx]?.id,
+        { addOnProduct },
+      ),
       views: currentSettings.views.map((view, index) => {
         if (index !== viewIdx) return view;
 
@@ -931,9 +1131,19 @@ export default function ProductCustomiser() {
   };
 
   const updatePositionField = (viewIdx, positionIdx, field, value) => {
-    setSettings((currentSettings) => ({
-      ...currentSettings,
-      views: currentSettings.views.map((view, index) => {
+    setSettings((currentSettings) => {
+      const view = currentSettings.views[viewIdx];
+      const position = view?.positions?.[positionIdx];
+      const nextSettings = mergePositionOverride(
+        currentSettings,
+        view?.id,
+        position?.id,
+        field === "name" ? { name: value } : { [field]: value },
+      );
+
+      return {
+        ...nextSettings,
+        views: currentSettings.views.map((view, index) => {
         if (index !== viewIdx) return view;
         return {
           ...view,
@@ -943,17 +1153,28 @@ export default function ProductCustomiser() {
               : position,
           ),
         };
-      }),
-    }));
+        }),
+      };
+    });
   };
 
   const updateCanvasField = (viewIdx, positionIdx, field, value) => {
     const numValue = parseFloat(value);
     if (isNaN(numValue)) return;
 
-    setSettings((currentSettings) => ({
-      ...currentSettings,
-      views: currentSettings.views.map((view, index) => {
+    setSettings((currentSettings) => {
+      const view = currentSettings.views[viewIdx];
+      const position = view?.positions?.[positionIdx];
+      const nextSettings = mergePositionOverride(
+        currentSettings,
+        view?.id,
+        position?.id,
+        { canvas: { [field]: numValue } },
+      );
+
+      return {
+        ...nextSettings,
+        views: currentSettings.views.map((view, index) => {
         if (index !== viewIdx) return view;
         return {
           ...view,
@@ -966,8 +1187,9 @@ export default function ProductCustomiser() {
               : position,
           ),
         };
-      }),
-    }));
+        }),
+      };
+    });
   };
 
   const clearImage = (colorIdx, imageKey) => {
@@ -1796,6 +2018,58 @@ export default function ProductCustomiser() {
                 and the add-on product attached to each area.
               </s-text>
             </s-stack>
+            {productTemplates.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  alignItems: "end",
+                  gap: "10px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <label
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "4px",
+                    minWidth: "240px",
+                  }}
+                >
+                  <span style={{ fontSize: "13px", fontWeight: 600 }}>
+                    Product template
+                  </span>
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(event) =>
+                      setSelectedTemplateId(event.currentTarget.value)
+                    }
+                    style={{
+                      minHeight: "34px",
+                      border: "1px solid #babfc3",
+                      borderRadius: "6px",
+                      backgroundColor: "#fff",
+                      color: "#202223",
+                      padding: "6px 10px",
+                    }}
+                  >
+                    <option value="">Choose template</option>
+                    {productTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <s-button
+                  variant="primary"
+                  disabled={!selectedTemplateId}
+                  onClick={applySelectedTemplate}
+                >
+                  Apply Template
+                </s-button>
+              </div>
+            )}
             {settings.views.map((view, viewIdx) => {
               const isCollapsed = collapsedViewIds.has(view.id);
 
