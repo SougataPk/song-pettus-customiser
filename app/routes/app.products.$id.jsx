@@ -341,6 +341,65 @@ const cloneTemplateSettings = (template, colors) => {
   };
 };
 
+const findMatchingView = (views, targetView) =>
+  views?.find(
+    (view) =>
+      view.id === targetView.id ||
+      view.name?.toLowerCase() === targetView.name?.toLowerCase(),
+  );
+
+const findMatchingPosition = (positions, targetPosition) =>
+  positions?.find(
+    (position) =>
+      position.id === targetPosition.id ||
+      position.name?.toLowerCase() === targetPosition.name?.toLowerCase(),
+  );
+
+const preserveTemplateColorImages = (templateSettings, existingSettings) => ({
+  ...templateSettings,
+  colorImages: templateSettings.colorImages.map((templateColorImage) => {
+    const existingColorImage = existingSettings.colorImages?.find(
+      (item) => item.color === templateColorImage.color,
+    );
+    const existingImages = existingColorImage?.images || {};
+    const images = { ...templateColorImage.images, ...existingImages };
+
+    templateSettings.views.forEach((view) => {
+      const existingView = findMatchingView(existingSettings.views, view);
+      const viewImage = existingView
+        ? getExistingImage(existingImages, existingView)
+        : getExistingImage(existingImages, view);
+
+      if (viewImage) {
+        images[view.id] = viewImage;
+      }
+
+      view.positions.forEach((position) => {
+        const imageKey = getPositionImageKey(view.id, position.id);
+        const existingPosition = findMatchingPosition(
+          existingView?.positions,
+          position,
+        );
+        const existingImageKey =
+          existingView && existingPosition
+            ? getPositionImageKey(existingView.id, existingPosition.id)
+            : imageKey;
+        const positionImage =
+          existingImages[imageKey] || existingImages[existingImageKey] || "";
+
+        if (positionImage) {
+          images[imageKey] = positionImage;
+        }
+      });
+    });
+
+    return {
+      ...templateColorImage,
+      images,
+    };
+  }),
+});
+
 const getSelectedTemplateId = (settings, templates) =>
   templates.some((template) => template.id === settings?.templateId)
     ? settings.templateId
@@ -1018,7 +1077,10 @@ export default function ProductCustomiser() {
     );
     if (!template) return;
 
-    const nextSettings = cloneTemplateSettings(template, productColors);
+    const nextSettings = preserveTemplateColorImages(
+      cloneTemplateSettings(template, productColors),
+      settings,
+    );
     setSettings(nextSettings);
     setSelectedTemplateId(template.id);
     setCollapsedViewIds(new Set(nextSettings.views.map((view) => view.id)));
