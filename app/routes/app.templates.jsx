@@ -59,6 +59,7 @@ const createPosition = (name = "Print area", canvas = DEFAULT_CANVAS) => ({
 const createView = (name, positions = DEFAULT_POSITION_NAMES) => ({
   id: createSideKey(name) || createId("side"),
   name,
+  previewImage: "",
   allowMultipleSelections: false,
   optional: false,
   enableCollapsible: false,
@@ -90,6 +91,7 @@ const normalizeView = (view, index = 0) => {
   return {
     id: view?.id || createSideKey(name) || createId(`side-${index}`),
     name,
+    previewImage: view?.previewImage || "",
     allowMultipleSelections: Boolean(view?.allowMultipleSelections),
     optional: Boolean(view?.optional),
     enableCollapsible: Boolean(view?.enableCollapsible),
@@ -291,6 +293,7 @@ const sanitizeTemplates = async (admin, templates) =>
         views: await Promise.all(
           template.settings.views.map(async (view) => ({
             ...view,
+            previewImage: view.previewImage || "",
             allowMultipleSelections: Boolean(view.allowMultipleSelections),
             optional: Boolean(view.optional),
             enableCollapsible: Boolean(view.enableCollapsible),
@@ -413,6 +416,7 @@ export default function ProductTemplates() {
     loadedTemplates[0]?.id || "",
   );
   const [collapsedViewIds, setCollapsedViewIds] = useState(() => new Set());
+  const [uploadingPreviewImage, setUploadingPreviewImage] = useState(false);
 
   const activeTemplate =
     templates.find((template) => template.id === activeTemplateId) ||
@@ -533,6 +537,205 @@ export default function ProductTemplates() {
       positions: view.positions.filter((_, index) => index !== positionIdx),
     }));
   };
+
+  const updateViewPreviewImage = (viewIdx, previewImage) => {
+    updateView(viewIdx, (view) => ({
+      ...view,
+      previewImage,
+    }));
+  };
+
+  const uploadPreviewImage = async (event, viewIdx) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+
+    if (!file) return;
+
+    setUploadingPreviewImage(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      formData.append("fileName", `template-preview-${Date.now()}`);
+
+      const response = await fetch("/api/cloudinary", {
+        method: "POST",
+        body: formData,
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.imageUrl) {
+        throw new Error(result.error || "Image upload failed");
+      }
+
+      updateViewPreviewImage(viewIdx, result.imageUrl);
+      shopify.toast.show("Preview image uploaded");
+    } catch (error) {
+      console.error("Template preview upload failed", error);
+      shopify.toast.show(error.message || "Image upload failed");
+    } finally {
+      setUploadingPreviewImage(false);
+    }
+  };
+
+  const renderPositionOverlay = (position) => (
+    <div
+      title={position.name}
+      style={{
+        position: "absolute",
+        top: `${position.canvas.top}%`,
+        left: `${position.canvas.left}%`,
+        width: `${position.canvas.width}%`,
+        height: `${position.canvas.height}%`,
+        border: "2px dashed #008060",
+        backgroundColor: "rgba(0, 128, 96, 0.12)",
+        color: "#202223",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: "10px",
+        fontWeight: 600,
+        lineHeight: "12px",
+        overflow: "hidden",
+        padding: "2px",
+        pointerEvents: "none",
+        textAlign: "center",
+        wordBreak: "break-word",
+      }}
+    >
+      {position.name}
+    </div>
+  );
+
+  const renderImagePreview = (imageUrl, altText, positions) => (
+    <div
+      style={{
+        width: "100%",
+        position: "relative",
+        border: "1px solid #e3e3e3",
+        borderRadius: "6px",
+        backgroundColor: "#f6f6f7",
+        overflow: "hidden",
+      }}
+    >
+      <img
+        src={imageUrl}
+        alt={altText}
+        style={{
+          width: "100%",
+          display: "block",
+          objectFit: "contain",
+        }}
+      />
+      {positions.map((position) => renderPositionOverlay(position))}
+    </div>
+  );
+
+  const renderEmptyPreviewState = () => (
+    <div
+      style={{
+        minHeight: "220px",
+        border: "1px dashed #c9cccf",
+        borderRadius: "6px",
+        backgroundColor: "#fafafa",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "16px",
+        textAlign: "center",
+      }}
+    >
+      <s-text color="subdued">
+        Add a reference image to position print areas.
+      </s-text>
+    </div>
+  );
+
+  const renderPreviewImageArea = (view, viewIdx) => (
+    <div
+      style={{
+        border: "1px solid #e3e3e3",
+        borderRadius: "8px",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        backgroundColor: "#fff",
+      }}
+    >
+      <div
+        style={{
+          padding: "14px 16px",
+          borderBottom: "1px solid #e3e3e3",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "12px",
+          flexWrap: "wrap",
+        }}
+      >
+        <s-stack direction="block" gap="none">
+          <s-text type="strong">{view.name} preview image</s-text>
+          <s-text color="subdued">
+            Reference only for setting template positions.
+          </s-text>
+        </s-stack>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "8px",
+            justifyContent: "flex-end",
+          }}
+        >
+          <s-button
+            disabled={uploadingPreviewImage}
+            {...(uploadingPreviewImage ? { loading: true } : {})}
+          >
+            <label
+              style={{
+                cursor: uploadingPreviewImage ? "default" : "pointer",
+              }}
+            >
+              {view.previewImage ? "Change File" : "Add File"}
+              <input
+                type="file"
+                accept="image/*"
+                disabled={uploadingPreviewImage}
+                onChange={(event) => uploadPreviewImage(event, viewIdx)}
+                style={{ display: "none" }}
+              />
+            </label>
+          </s-button>
+          {view.previewImage && (
+            <s-button
+              variant="tertiary"
+              tone="critical"
+              onClick={() => updateViewPreviewImage(viewIdx, "")}
+            >
+              Remove
+            </s-button>
+          )}
+        </div>
+      </div>
+
+      <div
+        style={{
+          padding: "16px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "14px",
+        }}
+      >
+        {view.previewImage
+          ? renderImagePreview(
+              view.previewImage,
+              `${activeTemplate.name} ${view.name} preview`,
+              view.positions,
+            )
+          : renderEmptyPreviewState()}
+      </div>
+    </div>
+  );
 
   const resolveAddOnProduct = async (selectedProduct, selectedVariant) => {
     const formData = new FormData();
@@ -808,7 +1011,7 @@ export default function ProductTemplates() {
                               gap: "12px",
                             }}
                           >
-                            <label
+                            <div
                               style={{
                                 border: view.allowMultipleSelections
                                   ? "1px solid #008060"
@@ -821,10 +1024,10 @@ export default function ProductTemplates() {
                                 display: "flex",
                                 alignItems: "flex-start",
                                 gap: "10px",
-                                cursor: "pointer",
                               }}
                             >
                               <input
+                                id={`${view.id}-allow-multiple`}
                                 type="checkbox"
                                 checked={view.allowMultipleSelections}
                                 onChange={(event) =>
@@ -837,15 +1040,22 @@ export default function ProductTemplates() {
                                 style={{ marginTop: "3px" }}
                               />
                               <span>
-                                <span style={{ display: "block", fontWeight: 600 }}>
+                                <label
+                                  htmlFor={`${view.id}-allow-multiple`}
+                                  style={{
+                                    display: "block",
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                  }}
+                                >
                                   Multi-option selector
-                                </span>
+                                </label>
                                 <span style={{ color: "#6d7175" }}>
                                   Allow customers to select more than one option
                                   in this block.
                                 </span>
                               </span>
-                            </label>
+                            </div>
 
                             <div
                               style={{
@@ -862,15 +1072,15 @@ export default function ProductTemplates() {
                                 gap: "12px",
                               }}
                             >
-                              <label
+                              <div
                                 style={{
                                   display: "flex",
                                   alignItems: "flex-start",
                                   gap: "10px",
-                                  cursor: "pointer",
                                 }}
                               >
                                 <input
+                                  id={`${view.id}-enable-collapsible`}
                                   type="checkbox"
                                   checked={view.enableCollapsible}
                                   onChange={(event) =>
@@ -883,17 +1093,22 @@ export default function ProductTemplates() {
                                   style={{ marginTop: "3px" }}
                                 />
                                 <span>
-                                  <span
-                                    style={{ display: "block", fontWeight: 600 }}
+                                  <label
+                                    htmlFor={`${view.id}-enable-collapsible`}
+                                    style={{
+                                      display: "block",
+                                      fontWeight: 600,
+                                      cursor: "pointer",
+                                    }}
                                   >
                                     Collapsible block
-                                  </span>
+                                  </label>
                                   <span style={{ color: "#6d7175" }}>
                                     Use this side inside a collapsible frontend
                                     tab.
                                   </span>
                                 </span>
-                              </label>
+                              </div>
                               <s-text-field
                                 label="Collapsible heading"
                                 value={view.collapsibleHeading}
@@ -908,6 +1123,8 @@ export default function ProductTemplates() {
                               />
                             </div>
                           </div>
+
+                          {renderPreviewImageArea(view, viewIdx)}
 
                           <s-stack direction="block" gap="base">
                             {view.positions.map((position, positionIdx) => (
