@@ -2213,24 +2213,34 @@ export default function ProductCustomiser() {
                       ))}
                     </select>
                   </label>
-                  <s-button
-                    variant="primary"
-                    disabled={!selectedTemplateId}
-                    onClick={applySelectedTemplate}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      flexWrap: "wrap",
+                    }}
                   >
-                    Apply Template
-                  </s-button>
-                  {appliedTemplateName && (
-                    <span
-                      style={{
-                        color: "#6d7175",
-                        fontSize: "12px",
-                        lineHeight: 1.4,
-                      }}
+                    <s-button
+                      variant="primary"
+                      disabled={!selectedTemplateId}
+                      onClick={applySelectedTemplate}
                     >
-                      Applied: {appliedTemplateName}
-                    </span>
-                  )}
+                      Apply Template
+                    </s-button>
+                    {appliedTemplateName && (
+                      <span
+                        style={{
+                          color: "#6d7175",
+                          fontSize: "12px",
+                          lineHeight: 1.4,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Applied: {appliedTemplateName}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
