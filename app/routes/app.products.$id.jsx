@@ -974,6 +974,11 @@ export default function ProductCustomiser() {
           option.name.toLowerCase() === "colour",
       )
       ?.values || ["Default"];
+  const appliedTemplateName =
+    settings.templateName ||
+    productTemplates.find((template) => template.id === settings.templateId)
+      ?.name ||
+    "";
   const isSaving = fetcher.state !== "idle";
   const hasUnsavedChanges =
     needsDefaultSave ||
@@ -2143,13 +2148,14 @@ export default function ProductCustomiser() {
           <s-stack direction="block" gap="base">
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(280px, 1fr) auto",
-                alignItems: "start",
-                gap: "20px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: "24px",
+                flexWrap: "wrap",
               }}
             >
-              <div style={{ minWidth: 0 }}>
+              <div style={{ flex: "1 1 420px", minWidth: 0 }}>
                 <s-stack direction="block" gap="none">
                   <s-heading>Product sides and print positions</s-heading>
                   <s-text color="subdued">
@@ -2162,17 +2168,17 @@ export default function ProductCustomiser() {
                 <div
                   style={{
                     display: "flex",
-                    alignItems: "center",
+                    flex: "0 0 280px",
+                    flexDirection: "column",
+                    alignItems: "stretch",
                     gap: "8px",
-                    flexWrap: "wrap",
-                    justifyContent: "flex-end",
                   }}
                 >
                   <label
                     style={{
                       display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
+                      flexDirection: "column",
+                      gap: "4px",
                     }}
                   >
                     <span
@@ -2196,7 +2202,7 @@ export default function ProductCustomiser() {
                         backgroundColor: "#fff",
                         color: "#202223",
                         padding: "6px 10px",
-                        width: "220px",
+                        width: "100%",
                       }}
                     >
                       <option value="">Choose template</option>
@@ -2214,6 +2220,17 @@ export default function ProductCustomiser() {
                   >
                     Apply Template
                   </s-button>
+                  {appliedTemplateName && (
+                    <span
+                      style={{
+                        color: "#6d7175",
+                        fontSize: "12px",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      Applied: {appliedTemplateName}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
