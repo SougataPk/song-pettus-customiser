@@ -2563,31 +2563,32 @@ export default function ProductCustomiser() {
                               >
                                 <div
                                   style={{
-                                    display: "flex",
-                                    flexWrap: "wrap",
-                                    gap: "8px",
+                                    display: "grid",
+                                    gridTemplateColumns:
+                                      "repeat(auto-fit, minmax(120px, 1fr))",
+                                    gap: "10px",
                                   }}
                                 >
                                   {[
-                                    ["Top", position.canvas.top],
-                                    ["Left", position.canvas.left],
-                                    ["Width", position.canvas.width],
-                                    ["Height", position.canvas.height],
-                                  ].map(([label, value]) => (
-                                    <span
-                                      key={label}
-                                      style={{
-                                        border: "1px solid #e3e3e3",
-                                        borderRadius: "999px",
-                                        backgroundColor: "#f6f6f7",
-                                        color: "#6d7175",
-                                        fontSize: "12px",
-                                        fontWeight: 600,
-                                        padding: "4px 10px",
-                                      }}
-                                    >
-                                      {label}: {value}%
-                                    </span>
+                                    ["top", "Top"],
+                                    ["left", "Left"],
+                                    ["width", "Width"],
+                                    ["height", "Height"],
+                                  ].map(([field, label]) => (
+                                    <s-text-field
+                                      key={field}
+                                      label={`${label} %`}
+                                      type="number"
+                                      value={String(position.canvas[field])}
+                                      onChange={(event) =>
+                                        updateCanvasField(
+                                          viewIdx,
+                                          positionIdx,
+                                          field,
+                                          event.currentTarget.value,
+                                        )
+                                      }
+                                    />
                                   ))}
                                 </div>
 
