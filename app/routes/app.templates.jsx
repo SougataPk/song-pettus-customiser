@@ -905,12 +905,14 @@ export default function ProductTemplates() {
                     <s-text-field
                       label="Template name"
                       value={activeTemplate.name}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const name = event.currentTarget.value;
+
                         updateTemplate(activeTemplateIndex, (template) => ({
                           ...template,
-                          name: event.currentTarget.value,
-                        }))
-                      }
+                          name,
+                        }));
+                      }}
                       autocomplete="off"
                     />
                   </div>
@@ -957,15 +959,16 @@ export default function ProductTemplates() {
                           <s-text-field
                             label="Side name"
                             value={view.name}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                              const name = event.currentTarget.value;
+
                               updateView(viewIdx, (currentView) => ({
                                 ...currentView,
-                                name: event.currentTarget.value,
+                                name,
                                 collapsibleHeading:
-                                  currentView.collapsibleHeading ||
-                                  event.currentTarget.value,
-                              }))
-                            }
+                                  currentView.collapsibleHeading || name,
+                              }));
+                            }}
                             autocomplete="off"
                           />
                         </div>
@@ -1030,13 +1033,15 @@ export default function ProductTemplates() {
                                 id={`${view.id}-allow-multiple`}
                                 type="checkbox"
                                 checked={view.allowMultipleSelections}
-                                onChange={(event) =>
+                                onChange={(event) => {
+                                  const allowMultipleSelections =
+                                    event.currentTarget.checked;
+
                                   updateView(viewIdx, (currentView) => ({
                                     ...currentView,
-                                    allowMultipleSelections:
-                                      event.currentTarget.checked,
-                                  }))
-                                }
+                                    allowMultipleSelections,
+                                  }));
+                                }}
                                 style={{ marginTop: "3px" }}
                               />
                               <span>
@@ -1083,13 +1088,15 @@ export default function ProductTemplates() {
                                   id={`${view.id}-enable-collapsible`}
                                   type="checkbox"
                                   checked={view.enableCollapsible}
-                                  onChange={(event) =>
+                                  onChange={(event) => {
+                                    const enableCollapsible =
+                                      event.currentTarget.checked;
+
                                     updateView(viewIdx, (currentView) => ({
                                       ...currentView,
-                                      enableCollapsible:
-                                        event.currentTarget.checked,
-                                    }))
-                                  }
+                                      enableCollapsible,
+                                    }));
+                                  }}
                                   style={{ marginTop: "3px" }}
                                 />
                                 <span>
@@ -1112,13 +1119,15 @@ export default function ProductTemplates() {
                               <s-text-field
                                 label="Collapsible heading"
                                 value={view.collapsibleHeading}
-                                onChange={(event) =>
+                                onChange={(event) => {
+                                  const collapsibleHeading =
+                                    event.currentTarget.value;
+
                                   updateView(viewIdx, (currentView) => ({
                                     ...currentView,
-                                    collapsibleHeading:
-                                      event.currentTarget.value,
-                                  }))
-                                }
+                                    collapsibleHeading,
+                                  }));
+                                }}
                                 autocomplete="off"
                               />
                             </div>
@@ -1150,16 +1159,18 @@ export default function ProductTemplates() {
                                     <s-text-field
                                       label="Position name"
                                       value={position.name}
-                                      onChange={(event) =>
+                                      onChange={(event) => {
+                                        const name = event.currentTarget.value;
+
                                         updatePosition(
                                           viewIdx,
                                           positionIdx,
                                           (currentPosition) => ({
                                             ...currentPosition,
-                                            name: event.currentTarget.value,
+                                            name,
                                           }),
-                                        )
-                                      }
+                                        );
+                                      }}
                                       autocomplete="off"
                                     />
                                   </div>
