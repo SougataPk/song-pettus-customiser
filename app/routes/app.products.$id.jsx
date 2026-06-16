@@ -134,13 +134,33 @@ const normalizePosition = (
 });
 
 const normalizePrice = (price) => {
-  if (!price) return "";
+  if (price === null || price === undefined || price === "") return "";
 
   if (typeof price === "object") {
     return price.amount || price.value || "";
   }
 
   return String(price);
+};
+
+const toShopifyGid = (resourceType, id) => {
+  if (!id) return "";
+  const stringId = String(id);
+
+  if (stringId.startsWith("gid://shopify/")) return stringId;
+
+  const numericId = stringId.match(/\d+$/)?.[0];
+  return numericId ? `gid://shopify/${resourceType}/${numericId}` : stringId;
+};
+
+const getFirstVariant = (variants) => {
+  if (Array.isArray(variants)) return variants[0] || null;
+
+  if (Array.isArray(variants?.nodes)) return variants.nodes[0] || null;
+
+  if (Array.isArray(variants?.edges)) return variants.edges[0]?.node || null;
+
+  return null;
 };
 
 const normalizeAddOnProduct = (product) => {
@@ -154,13 +174,13 @@ const normalizeAddOnProduct = (product) => {
     product.images?.[0]?.originalSrc ||
     product.images?.[0]?.url ||
     "";
-  const variant = product.variant || product.variants?.[0] || null;
+  const variant = product.variant || getFirstVariant(product.variants);
 
   return {
-    id: product.id,
+    id: toShopifyGid("Product", product.id),
     title: product.title,
     imageUrl,
-    variantId: product.variantId || variant?.id || "",
+    variantId: toShopifyGid("ProductVariant", product.variantId || variant?.id),
     variantTitle:
       product.variantTitle || variant?.displayName || variant?.title || "",
     price: normalizePrice(product.price || variant?.price),
@@ -586,48 +606,57 @@ const normalizeSettings = (colors, parsed) => {
 };
 
 const fetchAddOnProduct = async (admin, productId, variantId) => {
-  if (variantId) {
-    const variantResponse = await admin.graphql(
-      `#graphql
-      query getAddOnVariant($id: ID!) {
-        node(id: $id) {
-          ... on ProductVariant {
-            id
-            title
-            displayName
-            price
-            image {
-              url
-            }
-            product {
+  const normalizedProductId = toShopifyGid("Product", productId);
+  const normalizedVariantId = toShopifyGid("ProductVariant", variantId);
+
+  if (normalizedVariantId) {
+    try {
+      const variantResponse = await admin.graphql(
+        `#graphql
+        query getAddOnVariant($id: ID!) {
+          node(id: $id) {
+            ... on ProductVariant {
               id
               title
-              featuredImage {
+              displayName
+              price
+              image {
                 url
+              }
+              product {
+                id
+                title
+                featuredImage {
+                  url
+                }
               }
             }
           }
-        }
-      }`,
-      {
-        variables: { id: variantId },
-        tries: 3,
-      },
-    );
-    const variantJson = await variantResponse.json();
-    if (variantJson.errors?.length) {
-      throw new Error(variantJson.errors.map((error) => error.message).join(", "));
-    }
+        }`,
+        {
+          variables: { id: normalizedVariantId },
+          tries: 3,
+        },
+      );
+      const variantJson = await variantResponse.json();
+      if (variantJson.errors?.length) {
+        throw new Error(
+          variantJson.errors.map((error) => error.message).join(", "),
+        );
+      }
 
-    const variant = variantJson.data?.node;
+      const variant = variantJson.data?.node;
 
-    if (variant?.product) {
-      return normalizeAddOnProduct({
-        id: variant.product.id,
-        title: variant.product.title,
-        imageUrl: variant.image?.url || variant.product.featuredImage?.url,
-        variant,
-      });
+      if (variant?.product) {
+        return normalizeAddOnProduct({
+          id: variant.product.id,
+          title: variant.product.title,
+          imageUrl: variant.image?.url || variant.product.featuredImage?.url,
+          variant,
+        });
+      }
+    } catch (error) {
+      console.error("Could not fetch selected add-on variant", error);
     }
   }
 
@@ -654,7 +683,7 @@ const fetchAddOnProduct = async (admin, productId, variantId) => {
       }
     }`,
     {
-      variables: { id: productId },
+      variables: { id: normalizedProductId },
       tries: 3,
     },
   );
