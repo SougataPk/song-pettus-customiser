@@ -33,6 +33,20 @@ const createSideKey = (name) =>
 const getPositionImageKey = (viewId, positionId) =>
   `${viewId}::position::${positionId}`;
 
+const getImageFileName = (imageUrl = "") => {
+  if (!imageUrl) return "";
+
+  try {
+    const url = new URL(imageUrl);
+    const fileName = url.pathname.split("/").filter(Boolean).pop() || "";
+    return decodeURIComponent(fileName);
+  } catch {
+    const [path] = imageUrl.split("?");
+    const fileName = path.split("/").filter(Boolean).pop() || "";
+    return decodeURIComponent(fileName);
+  }
+};
+
 const getViewId = (name, existingId) => {
   const sideKey = createSideKey(name);
   if (DEFAULT_VIEWS.some((viewName) => createSideKey(viewName) === sideKey)) {
@@ -1464,7 +1478,7 @@ export default function ProductCustomiser() {
       heading: "Select image",
       items: productImages.map((image, index) => ({
         id: image.id,
-        heading: image.altText || `Product image ${index + 1}`,
+        heading: getImageFileName(image.url) || `Product image ${index + 1}`,
         thumbnail: { url: image.url },
         selected: image.url === selectedImage,
       })),
