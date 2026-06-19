@@ -13,6 +13,12 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 const DEFAULT_CANVAS = { top: 10, left: 10, width: 20, height: 20 };
 const DEFAULT_VIEWS = ["Front", "Back", "Sleeve"];
 const DEFAULT_POSITION_NAMES = ["Left Chest", "Right Chest"];
+const CANVAS_PERCENTAGE_FIELDS = [
+  ["top", "Top %"],
+  ["left", "Left %"],
+  ["width", "Width %"],
+  ["height", "Height %"],
+];
 const SIDE_OPTION_FIELDS = [
   "allowMultipleSelections",
   "optional",
@@ -46,6 +52,42 @@ const getImageFileName = (imageUrl = "") => {
     return decodeURIComponent(fileName);
   }
 };
+
+const CanvasNumberField = ({ id, label, value, onChange }) => (
+  <label
+    htmlFor={id}
+    style={{
+      display: "flex",
+      flexDirection: "column",
+      gap: "4px",
+      fontSize: "13px",
+      lineHeight: "18px",
+      color: "#303030",
+    }}
+  >
+    <span>{label}</span>
+    <input
+      id={id}
+      type="number"
+      min="0"
+      max="100"
+      step="1"
+      value={value}
+      onChange={onChange}
+      style={{
+        width: "100%",
+        minHeight: "32px",
+        boxSizing: "border-box",
+        border: "1px solid #8a8a8a",
+        borderRadius: "8px",
+        padding: "4px 8px",
+        font: "inherit",
+        color: "#303030",
+        backgroundColor: "#fff",
+      }}
+    />
+  </label>
+);
 
 const getViewId = (name, existingId) => {
   const sideKey = createSideKey(name);
@@ -1998,54 +2040,22 @@ export default function ProductCustomiser() {
                 gap: "8px",
               }}
             >
-              <s-number-field
-                label="Top %"
-                value={String(position.canvas.top)}
-                onChange={(e) =>
-                  updateCanvasField(
-                    viewIdx,
-                    positionIdx,
-                    "top",
-                    e.currentTarget.value,
-                  )
-                }
-              />
-              <s-number-field
-                label="Left %"
-                value={String(position.canvas.left)}
-                onChange={(e) =>
-                  updateCanvasField(
-                    viewIdx,
-                    positionIdx,
-                    "left",
-                    e.currentTarget.value,
-                  )
-                }
-              />
-              <s-number-field
-                label="Width %"
-                value={String(position.canvas.width)}
-                onChange={(e) =>
-                  updateCanvasField(
-                    viewIdx,
-                    positionIdx,
-                    "width",
-                    e.currentTarget.value,
-                  )
-                }
-              />
-              <s-number-field
-                label="Height %"
-                value={String(position.canvas.height)}
-                onChange={(e) =>
-                  updateCanvasField(
-                    viewIdx,
-                    positionIdx,
-                    "height",
-                    e.currentTarget.value,
-                  )
-                }
-              />
+              {CANVAS_PERCENTAGE_FIELDS.map(([field, label]) => (
+                <CanvasNumberField
+                  key={field}
+                  id={`position-editor-${view.id}-${position.id}-${field}`}
+                  label={label}
+                  value={String(position.canvas[field])}
+                  onChange={(e) =>
+                    updateCanvasField(
+                      viewIdx,
+                      positionIdx,
+                      field,
+                      e.currentTarget.value,
+                    )
+                  }
+                />
+              ))}
             </div>
 
             <div
@@ -2553,16 +2563,12 @@ export default function ProductCustomiser() {
                                     gap: "10px",
                                   }}
                                 >
-                                  {[
-                                    ["top", "Top"],
-                                    ["left", "Left"],
-                                    ["width", "Width"],
-                                    ["height", "Height"],
-                                  ].map(([field, label]) => (
-                                    <s-text-field
+                                  {CANVAS_PERCENTAGE_FIELDS.map(
+                                    ([field, label]) => (
+                                    <CanvasNumberField
                                       key={field}
-                                      label={`${label} %`}
-                                      type="number"
+                                      id={`position-${view.id}-${position.id}-${field}`}
+                                      label={label}
                                       value={String(position.canvas[field])}
                                       onChange={(event) =>
                                         updateCanvasField(

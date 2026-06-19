@@ -8,6 +8,12 @@ const DEFAULT_CANVAS = { top: 10, left: 10, width: 20, height: 20 };
 const DEFAULT_POSITION_NAMES = ["Left Chest", "Right Chest"];
 const TEMPLATE_NAMESPACE = "custom";
 const TEMPLATE_KEY = "product_templates";
+const CANVAS_PERCENTAGE_FIELDS = [
+  ["top", "Top"],
+  ["left", "Left"],
+  ["width", "Width"],
+  ["height", "Height"],
+];
 
 const createId = (prefix) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -18,6 +24,42 @@ const createSideKey = (name) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+
+const CanvasNumberField = ({ id, label, value, onChange }) => (
+  <label
+    htmlFor={id}
+    style={{
+      display: "flex",
+      flexDirection: "column",
+      gap: "4px",
+      fontSize: "13px",
+      lineHeight: "18px",
+      color: "#303030",
+    }}
+  >
+    <span>{label}</span>
+    <input
+      id={id}
+      type="number"
+      min="0"
+      max="100"
+      step="1"
+      value={value}
+      onChange={onChange}
+      style={{
+        width: "100%",
+        minHeight: "32px",
+        boxSizing: "border-box",
+        border: "1px solid #8a8a8a",
+        borderRadius: "8px",
+        padding: "4px 8px",
+        font: "inherit",
+        color: "#303030",
+        backgroundColor: "#fff",
+      }}
+    />
+  </label>
+);
 
 const normalizePrice = (price) => {
   if (price === null || price === undefined || price === "") return "";
@@ -1293,15 +1335,12 @@ export default function ProductTemplates() {
                                       gap: "10px",
                                     }}
                                   >
-                                    {["top", "left", "width", "height"].map(
-                                      (field) => (
-                                        <s-text-field
+                                    {CANVAS_PERCENTAGE_FIELDS.map(
+                                      ([field, label]) => (
+                                        <CanvasNumberField
                                           key={field}
-                                          label={
-                                            field.charAt(0).toUpperCase() +
-                                            field.slice(1)
-                                          }
-                                          type="number"
+                                          id={`template-position-${view.id}-${position.id}-${field}`}
+                                          label={label}
                                           value={String(position.canvas[field])}
                                           onChange={(event) => {
                                             const value = parseFloat(
