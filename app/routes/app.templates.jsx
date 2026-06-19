@@ -829,11 +829,16 @@ export default function ProductTemplates() {
       formData.append("variantId", selectedVariant.id);
     }
 
+    const idToken = await shopify.idToken();
     const response = await fetch(window.location.href, {
       method: "POST",
       body: formData,
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
     });
-    const result = await response.json();
+    const responseText = await response.text();
+    const result = responseText ? JSON.parse(responseText) : {};
 
     if (!response.ok || !result.addOnProduct) {
       throw new Error(result.error || "Could not load add-on product details");
@@ -866,7 +871,7 @@ export default function ProductTemplates() {
     const selectedProduct = selected?.[0];
     if (!selectedProduct) return;
 
-    const selectedVariant = selectedProduct.variants?.[0];
+    const selectedVariant = getFirstVariant(selectedProduct.variants);
     const pickerProduct = normalizeAddOnProduct({
       ...selectedProduct,
       variant: selectedVariant,
@@ -887,7 +892,11 @@ export default function ProductTemplates() {
         ...position,
         addOnProduct: pickerProduct,
       }));
-      shopify.toast.show("Selected product, but could not load its price.");
+      if (pickerProduct?.price) {
+        shopify.toast.show("Add-on product selected");
+      } else {
+        shopify.toast.show("Selected product, but could not load its price.");
+      }
     }
   };
 
